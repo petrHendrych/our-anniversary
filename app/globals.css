@@ -1,26 +1,74 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Warm violet-black. Photographs are the only saturated thing on screen,
+     so every UI colour here sits low-chroma and out of their way. */
+  --ink: #14101a;
+  --ink-raised: #1c1725;
+  --bone: #efe7da;
+  --dim: #8c8195;
+  /* The one accent. Used only for the lit calendar ticks and the live
+     month readout — never for buttons, never as a gradient. */
+  --lit: #ffd9c7;
+  --line: rgb(239 231 218 / 0.14);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-ink: var(--ink);
+  --color-ink-raised: var(--ink-raised);
+  --color-bone: var(--bone);
+  --color-dim: var(--dim);
+  --color-lit: var(--lit);
+  --color-line: var(--line);
+
+  --font-display: var(--font-newsreader);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  /* Lenis owns scrolling from milestone 4 on; never let the browser also
+     smooth-scroll, or the two fight. */
+  scroll-behavior: auto;
+  background: var(--ink);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--ink);
+  color: var(--bone);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+@layer components {
+  /* Small caps-ish utility register: the spine, dates, readouts. */
+  .eyebrow {
+    font-family: var(--font-mono), ui-monospace, monospace;
+    font-size: 0.6875rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+
+  .display {
+    font-family: var(--font-display), Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: -0.015em;
+    line-height: 0.95;
+  }
+}
+
+:focus-visible {
+  outline: 1px solid var(--lit);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
