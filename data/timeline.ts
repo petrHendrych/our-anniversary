@@ -34,6 +34,83 @@ export interface YearBlock {
   months: Month[];
 }
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/** The run starts here and covers every month since, with no gaps. */
+const START_YEAR = 2024;
+const START_MONTH = 9;
+const MONTH_COUNT = 24;
+
+/**
+ * The months that have been written.
+ *
+ * Everything else in the two years is generated below as a placeholder, so the
+ * timeline is continuous from the first month to the last — an unwritten month
+ * is a month waiting to be written, not a month missing from the story. Replace
+ * an entry here as each one gets its photos and its text.
+ */
+const written: Record<
+  string,
+  Omit<Partial<Month>, "gallery"> & { photos?: number }
+> = {
+  "2024-09": {
+    title: "The First Night",
+    summary:
+      "A coffee that was supposed to take an hour and somehow took until the trams stopped running.",
+    date: "2024-09-14",
+    location: "Prague",
+    photos: 5,
+    notes:
+      "Neither of us remembers who suggested walking to the river. What we do remember is standing on the bridge arguing about whether the swans were asleep, and the exact moment it stopped feeling like a first date.",
+  },
+  "2024-12": {
+    title: "Rain and Ramen",
+    summary: "The grey month. We stayed inside and made it the best one anyway.",
+    photos: 4,
+  },
+  "2025-04": {
+    title: "The Apartment",
+    summary: "Keys, boxes, and one plant that did not survive the move.",
+    date: "2025-04-03",
+    location: "Prague",
+    photos: 5,
+    notes:
+      "We ate the first dinner on the floor because the table came a week later. Best meal of the year.",
+  },
+  "2025-09": {
+    title: "Salt and Sunburn",
+    summary:
+      "Our first trip together. Four days, one very small rental car, zero regrets.",
+    location: "Istria, Croatia",
+    photos: 7,
+    notes:
+      "You insisted we take the coastal road even though it added two hours. You were right. You are usually right about roads.",
+  },
+  "2026-01": {
+    title: "Snow Week",
+    summary:
+      "You learned to snowboard. I learned how many times a person can fall over and still be smug about it.",
+    location: "Špindlerův Mlýn",
+    photos: 6,
+    notes:
+      "Day three was the good one. Empty slope, no wind, the light going gold at four.",
+  },
+  "2026-05": {
+    title: "The Long Way Home",
+    summary: "No plan, a full tank, and every detour we felt like taking.",
+    location: "Somewhere in Moravia",
+    photos: 6,
+  },
+};
+
+/** Photos a month has while its pictures are placeholders. Mirrored in scripts/generate-placeholders.mjs. */
+function photoCount(id: string, i: number): number {
+  return written[id]?.photos ?? 3 + (i % 3);
+}
+
 /** Builds the repetitive gallery entries for a month of placeholder photos. */
 function placeholderGallery(monthId: string, count: number, alt: string): MemoryPhoto[] {
   return Array.from({ length: count }, (_, i) => {
@@ -46,95 +123,36 @@ function placeholderGallery(monthId: string, count: number, alt: string): Memory
   });
 }
 
+function buildMonth(i: number): Month {
+  const offset = START_MONTH - 1 + i;
+  const year = START_YEAR + Math.floor(offset / 12);
+  const monthIndex = (offset % 12) + 1;
+  const monthLabel = MONTH_NAMES[monthIndex - 1];
+  const id = `${year}-${String(monthIndex).padStart(2, "0")}`;
+  const entry = written[id];
+
+  return {
+    id,
+    year,
+    monthIndex,
+    monthLabel,
+    coverImage: `/images/${id}/cover.jpg`,
+    title: entry?.title ?? `${monthLabel} ${year}`,
+    summary: entry?.summary ?? "Still to be written.",
+    date: entry?.date,
+    location: entry?.location,
+    gallery: placeholderGallery(id, photoCount(id, i), entry?.title ?? `${monthLabel} ${year}`),
+    notes: entry?.notes,
+  };
+}
+
+const allMonths: Month[] = Array.from({ length: MONTH_COUNT }, (_, i) => buildMonth(i));
+
+/**
+ * Two anniversary years, twelve months each — September to August, not January
+ * to December. lib/timeline's spine draws its ticks the same way.
+ */
 export const timeline: YearBlock[] = [
-  {
-    year: 2024,
-    label: "Year One",
-    months: [
-      {
-        id: "2024-09",
-        year: 2024,
-        monthIndex: 9,
-        monthLabel: "September",
-        coverImage: "/images/2024-09/cover.jpg",
-        title: "The First Night",
-        summary:
-          "A coffee that was supposed to take an hour and somehow took until the trams stopped running.",
-        date: "2024-09-14",
-        location: "Prague",
-        gallery: placeholderGallery("2024-09", 5, "The first night"),
-        notes:
-          "Neither of us remembers who suggested walking to the river. What we do remember is standing on the bridge arguing about whether the swans were asleep, and the exact moment it stopped feeling like a first date.",
-      },
-      {
-        id: "2024-12",
-        year: 2024,
-        monthIndex: 12,
-        monthLabel: "December",
-        coverImage: "/images/2024-12/cover.jpg",
-        title: "Rain and Ramen",
-        summary:
-          "The grey month. We stayed inside and made it the best one anyway.",
-        gallery: placeholderGallery("2024-12", 4, "Rain and ramen"),
-      },
-      {
-        id: "2025-04",
-        year: 2025,
-        monthIndex: 4,
-        monthLabel: "April",
-        coverImage: "/images/2025-04/cover.jpg",
-        title: "The Apartment",
-        summary: "Keys, boxes, and one plant that did not survive the move.",
-        date: "2025-04-03",
-        location: "Prague",
-        gallery: placeholderGallery("2025-04", 5, "The apartment"),
-        notes:
-          "We ate the first dinner on the floor because the table came a week later. Best meal of the year.",
-      },
-    ],
-  },
-  {
-    year: 2025,
-    label: "Year Two",
-    months: [
-      {
-        id: "2025-09",
-        year: 2025,
-        monthIndex: 9,
-        monthLabel: "September",
-        coverImage: "/images/2025-09/cover.jpg",
-        title: "Salt and Sunburn",
-        summary:
-          "Our first trip together. Four days, one very small rental car, zero regrets.",
-        location: "Istria, Croatia",
-        gallery: placeholderGallery("2025-09", 7, "Salt and sunburn"),
-        notes:
-          "You insisted we take the coastal road even though it added two hours. You were right. You are usually right about roads.",
-      },
-      {
-        id: "2026-01",
-        year: 2026,
-        monthIndex: 1,
-        monthLabel: "January",
-        coverImage: "/images/2026-01/cover.jpg",
-        title: "Snow Week",
-        summary:
-          "You learned to snowboard. I learned how many times a person can fall over and still be smug about it.",
-        location: "Špindlerův Mlýn",
-        gallery: placeholderGallery("2026-01", 6, "Snow week"),
-        notes: "Day three was the good one. Empty slope, no wind, the light going gold at four.",
-      },
-      {
-        id: "2026-05",
-        year: 2026,
-        monthIndex: 5,
-        monthLabel: "May",
-        coverImage: "/images/2026-05/cover.jpg",
-        title: "The Long Way Home",
-        summary: "No plan, a full tank, and every detour we felt like taking.",
-        location: "Somewhere in Moravia",
-        gallery: placeholderGallery("2026-05", 6, "The long way home"),
-      },
-    ],
-  },
+  { year: 2024, label: "Year One", months: allMonths.slice(0, 12) },
+  { year: 2025, label: "Year Two", months: allMonths.slice(12) },
 ];

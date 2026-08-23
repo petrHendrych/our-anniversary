@@ -10,8 +10,10 @@ import { months, years } from "@/lib/timeline";
 /** Distances from the camera, in the same world units as the runner. */
 const APPEAR_FAR = 4200;
 const APPEAR_NEAR = 3000;
-const PASS_FAR = 950;
-const PASS_NEAR = 420;
+/** Only the last moment fades, and only enough to hide the cut — the reader
+    flies through the letters rather than watching them dissolve. */
+const PASS_FAR = 150;
+const PASS_NEAR = 65;
 
 /**
  * The month's name, flying through the scene ahead of its photographs.
@@ -20,8 +22,9 @@ const PASS_NEAR = 420;
  * and the perspective is faked exactly the way the camera does it: apparent
  * size is CAMERA_Z / distance, so the title scales along the same curve as a
  * photo at the same depth would. Each title crosses the camera at its month's
- * start depth, is gone by the time the first photo arrives (PHOTO_LEAD), and
- * the reader effectively flies through it.
+ * start depth: it holds full strength all the way in, grows past the edges of
+ * the screen, and the reader passes straight through the letters. It is gone
+ * before the first photo arrives (PHOTO_LEAD).
  */
 export function MonthTitleRunner() {
   const nodes = useRef<Array<HTMLDivElement | null>>([]);

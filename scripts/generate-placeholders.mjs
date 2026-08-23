@@ -9,15 +9,34 @@
 import { mkdir } from "node:fs/promises";
 import sharp from "sharp";
 
-// Keep in sync with data/timeline.ts. [monthId, label, gallery count, hueA, hueB]
-const MONTHS = [
-  ["2024-09", "September 2024", 5, 268, 320],
-  ["2024-12", "December 2024", 4, 18, 348],
-  ["2025-04", "April 2025", 5, 128, 96],
-  ["2025-09", "September 2025", 7, 188, 232],
-  ["2026-01", "January 2026", 6, 205, 168],
-  ["2026-05", "May 2026", 6, 32, 8],
+// Keep in sync with data/timeline.ts: same start month, same count, same
+// photos-per-month rule, so every month the timeline names has pictures.
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ];
+const START_YEAR = 2024;
+const START_MONTH = 9;
+const MONTH_COUNT = 24;
+const WRITTEN_PHOTOS = {
+  "2024-09": 5,
+  "2024-12": 4,
+  "2025-04": 5,
+  "2025-09": 7,
+  "2026-01": 6,
+  "2026-05": 6,
+};
+
+const MONTHS = Array.from({ length: MONTH_COUNT }, (_, i) => {
+  const offset = START_MONTH - 1 + i;
+  const year = START_YEAR + Math.floor(offset / 12);
+  const monthIndex = (offset % 12) + 1;
+  const id = `${year}-${String(monthIndex).padStart(2, "0")}`;
+  const label = `${MONTH_NAMES[monthIndex - 1]} ${year}`;
+  const count = WRITTEN_PHOTOS[id] ?? 3 + (i % 3);
+  // Walk the hue wheel so neighbouring months never look like the same place.
+  return [id, label, count, (i * 47) % 360, (i * 47 + 52) % 360];
+});
 
 // Longest edge stays under the 1500-2000px cap from REQUIREMENTS.md.
 const COVER = { w: 1200, h: 1600 };

@@ -112,13 +112,17 @@ export interface RunnerPhoto {
   roll: number;
 }
 
-/** The four corners, cycled in order across the whole run. */
-const CORNERS = [
-  [-1, 1],
-  [1, 1],
-  [1, -1],
-  [-1, -1],
-] as const;
+/**
+ * Successive photos are placed a golden angle apart around the frame. It is
+ * the same trick sunflowers use: the sequence never repeats, never clumps, and
+ * two photos in a row are always well separated — but with the radius jittered
+ * it reads as scattered rather than as a pattern.
+ */
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+/** How often a photo ignores the spread and passes straight through the middle. */
+const CENTRE_CHANCE = 0.16;
+/** Screens are taller than they are wide, so the scatter is an ellipse. */
+const TALL = 1.3;
 
 function hash(text: string): number {
   let h = 2166136261;
@@ -148,7 +152,6 @@ const monthSpans: number[] = [];
 {
   // Months start on the far side of the camera; nothing of them exists before it.
   let cursor = CAMERA_PASS_DEPTH + AFTER_LENS;
-  let corner = 0;
 
   months.forEach((month, monthIndex) => {
     monthDepths.push(cursor);
@@ -157,8 +160,14 @@ const monthSpans: number[] = [];
 
     sources.forEach((src, i) => {
       const random = rng(hash(src));
-      const [cx, cy] = CORNERS[corner % CORNERS.length];
-      corner++;
+      const angle = photos.length * GOLDEN_ANGLE + between(random, -0.45, 0.45);
+      // Most photos sweep out past the edges of the screen; every so often one
+      // comes straight down the middle instead, so the reader is not always
+      // looking away from centre.
+      const radius =
+        random() < CENTRE_CHANCE
+          ? CORNER * between(random, 0, 0.2)
+          : CORNER * between(random, 0.6, 1.35);
 
       photos.push({
         key: src,
@@ -169,10 +178,8 @@ const monthSpans: number[] = [];
         // Jitter is under half a step, so photo depths stay strictly ascending
         // for nearestPhotoIndex() while the run stops reading as a ladder.
         depth: cursor + PHOTO_LEAD + i * PHOTO_STEP + between(random, -70, 70),
-        // The corner is the structure; the jitter stops four photos in a row
-        // from landing on exactly the same spot.
-        x: cx * CORNER * between(random, 0.74, 1.42),
-        y: cy * CORNER * between(random, 0.7, 1.3),
+        x: Math.cos(angle) * radius,
+        y: Math.sin(angle) * radius * TALL,
         size: BASE_SIZE * between(random, 0.86, 1.16),
         roll: between(random, -0.05, 0.05),
       });
@@ -197,7 +204,7 @@ export const INTRO_DEPTH: number = monthDepths[0];
  * month with seven photos gets more scroll than one with four, and the flight
  * speed stays even across all of them.
  */
-export const UNITS_PER_SCREEN = 1100;
+export const UNITS_PER_SCREEN = 1500;
 
 /** How many screens of scrolling a stretch of depth is worth. */
 export function screensFor(depth: number): number {
