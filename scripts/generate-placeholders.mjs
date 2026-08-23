@@ -11,12 +11,12 @@ import sharp from "sharp";
 
 // Keep in sync with data/timeline.ts. [monthId, label, gallery count, hueA, hueB]
 const MONTHS = [
-  ["2024-03", "March 2024", 5, 268, 320],
-  ["2024-06", "June 2024", 7, 188, 232],
-  ["2024-11", "November 2024", 4, 18, 348],
-  ["2025-02", "February 2025", 6, 205, 168],
-  ["2025-05", "May 2025", 5, 32, 8],
-  ["2025-09", "September 2025", 6, 128, 96],
+  ["2024-09", "September 2024", 5, 268, 320],
+  ["2024-12", "December 2024", 4, 18, 348],
+  ["2025-04", "April 2025", 5, 128, 96],
+  ["2025-09", "September 2025", 7, 188, 232],
+  ["2026-01", "January 2026", 6, 205, 168],
+  ["2026-05", "May 2026", 6, 32, 8],
 ];
 
 // Longest edge stays under the 1500-2000px cap from REQUIREMENTS.md.

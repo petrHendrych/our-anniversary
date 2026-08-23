@@ -29,7 +29,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#14101a",
+  // Opening pastel; ThemeShift repaints the page per month from lib/palette.
+  themeColor: "#e9d9c9",
   // The runner scene is full-bleed; let it reach behind the notch/home bar.
   viewportFit: "cover",
 };

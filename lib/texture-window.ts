@@ -11,9 +11,11 @@ import * as THREE from "three";
  *
  * Released textures are not disposed immediately — the last few are retained
  * so that scrubbing back and forth across a month boundary re-decodes nothing.
+ * A month is a cluster of several photos, so the retained count is sized to
+ * hold roughly two clusters' worth.
  */
 
-const RETAINED = 6;
+const RETAINED = 10;
 
 const loader = new THREE.TextureLoader();
 const cache = new Map<string, THREE.Texture>();

@@ -1,16 +1,45 @@
 @import "tailwindcss";
 
+/* Registering these as colours is what lets them be transitioned: ThemeShift
+   writes the current month's pastel onto <html> and the crossfade below does
+   the rest, with no per-frame JavaScript. */
+@property --ink {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #e9d9c9;
+}
+@property --bone {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #332a24;
+}
+@property --dim {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #7d6d5f;
+}
+@property --lit {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #b4703f;
+}
+
 :root {
-  /* Warm violet-black. Photographs are the only saturated thing on screen,
-     so every UI colour here sits low-chroma and out of their way. */
-  --ink: #14101a;
-  --ink-raised: #1c1725;
-  --bone: #efe7da;
-  --dim: #8c8195;
-  /* The one accent. Used only for the lit calendar ticks and the live
-     month readout — never for buttons, never as a gradient. */
-  --lit: #ffd9c7;
-  --line: rgb(239 231 218 / 0.14);
+  /* Opening pastel; every month repaints these — see lib/palette.ts. The
+     photographs are the only saturated thing on screen, so the page colour
+     stays soft and out of their way. */
+  --ink: #e9d9c9;
+  --bone: #332a24;
+  --dim: #7d6d5f;
+  --lit: #b4703f;
+  --ink-raised: color-mix(in oklab, var(--ink) 88%, var(--bone));
+  --line: color-mix(in oklab, var(--bone) 16%, transparent);
+
+  transition:
+    --ink 900ms ease,
+    --bone 900ms ease,
+    --dim 900ms ease,
+    --lit 900ms ease;
 }
 
 @theme inline {

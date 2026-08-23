@@ -60,26 +60,34 @@ export interface SpineTick {
 }
 
 /**
- * Every month of every year in the timeline, recorded or not.
+ * Every month of both years, recorded or not.
  *
- * The side nav draws all twelve ticks per year and lights only the months we
+ * A "year" here is an anniversary year, not a calendar one: it runs twelve
+ * months from whenever that year's first recorded month falls, so Year One
+ * starts in September and rolls over into the next calendar year partway
+ * through. The nav draws all twelve ticks and lights only the months we
  * actually wrote something for, so the empty stretches stay visible instead of
  * being collapsed away.
  */
-export const spineTicks: SpineTick[] = timeline.flatMap((year) =>
-  Array.from({ length: 12 }, (_, i) => {
-    const monthIndex = i + 1;
-    const month = year.months.find((m) => m.monthIndex === monthIndex);
+export const spineTicks: SpineTick[] = timeline.flatMap((year) => {
+  const first = year.months[0];
+  return Array.from({ length: 12 }, (_, i) => {
+    const offset = first.monthIndex - 1 + i;
+    const monthIndex = (offset % 12) + 1;
+    const calendarYear = first.year + Math.floor(offset / 12);
+    const month = year.months.find(
+      (m) => m.monthIndex === monthIndex && m.year === calendarYear,
+    );
     return {
-      key: `${year.year}-${String(monthIndex).padStart(2, "0")}`,
-      year: year.year,
+      key: `${calendarYear}-${String(monthIndex).padStart(2, "0")}`,
+      year: calendarYear,
       monthIndex,
-      label: MONTH_NAMES[i],
+      label: MONTH_NAMES[monthIndex - 1],
       monthId: month?.id ?? null,
       index: month ? getMonthIndex(month.id) : null,
     };
-  }),
-);
+  });
+});
 
 /** "March 2024 — September 2025" */
 export const rangeLabel = `${months[0].monthLabel} ${months[0].year} — ${

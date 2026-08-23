@@ -3,41 +3,35 @@
 import { useEffect, useRef, useState } from "react";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
-import type { Month } from "@/data/timeline";
 import { scrollState } from "@/lib/scroll-store";
 import { expandMonth, useExpandedMonthId, type CardRect } from "@/lib/expanded-store";
+import {
+  gateOpacity,
+  planeScale,
+  spreadScale,
+  type RunnerPhoto,
+} from "@/lib/runner-layout";
 import { acquireTexture, releaseTexture } from "@/lib/texture-window";
 
-/** World-space distance between consecutive months along the run. */
-const SPACING = 5;
-/** How far a card swings off-axis once it is no longer the current month. */
-const LATERAL = 0.95;
-/** Only a card this close to centre answers a tap. */
-const TAP_RANGE = 0.35;
+/** A photo this far past the camera plane is behind the reader — stop drawing it. */
+const PASSED = 240;
+/** Only a photo this near the camera plane answers a tap. */
+const TAP_RANGE = 700;
 
 const corner = new THREE.Vector3();
 
 /**
- * One month as a textured plane.
+ * One photo as a textured plane.
  *
- * The card reads `scrollState.runner` straight out of the store inside
- * useFrame — no React state, no re-renders while scrolling. `offset` is the
- * card's distance from the camera in months: 0 is centred and square-on,
- * positive is still ahead, negative has already gone by.
+ * The card reads `scrollState.depth` straight out of the store inside
+ * useFrame — no React state, no re-renders while scrolling. Its Z is simply
+ * `depth - photo.depth`: negative while the photo is still ahead in the haze,
+ * zero as it passes the camera plane, positive once it is behind the reader.
+ *
+ * Distance fade is the scene's fog, not per-card opacity, so photos surface
+ * out of the background colour instead of cross-dissolving over it.
  */
-export function MonthCard({
-  month,
-  index,
-  width,
-  height,
-  lift,
-}: {
-  month: Month;
-  index: number;
-  width: number;
-  height: number;
-  lift: number;
-}) {
+export function MonthCard({ photo }: { photo: RunnerPhoto }) {
   const mesh = useRef<THREE.Mesh>(null);
   const material = useRef<THREE.MeshBasicMaterial>(null);
   const pointerDown = useRef<{ x: number; y: number; time: number } | null>(null);
@@ -45,42 +39,37 @@ export function MonthCard({
   const camera = useThree((state) => state.camera);
   const size = useThree((state) => state.size);
   const expandedId = useExpandedMonthId();
-  const lane = index % 2 === 0 ? -1 : 1;
-  const hidden = expandedId === month.id;
+  const hidden = expandedId === photo.monthId;
+
+  const scale = planeScale(size.width);
+  const spread = spreadScale(size.width);
+  // Planes are unit-sized and scaled, so one geometry serves every photo.
+  const image = texture?.image as { width: number; height: number } | undefined;
+  const longest = image ? Math.max(image.width, image.height) : 1;
+  const width = image ? (photo.size * image.width) / longest : 0;
+  const height = image ? (photo.size * image.height) / longest : 0;
 
   useEffect(() => {
     let alive = true;
-    acquireTexture(month.coverImage).then((loaded) => {
+    acquireTexture(photo.src).then((loaded) => {
       if (alive) setTexture(loaded);
     });
     return () => {
       alive = false;
-      releaseTexture(month.coverImage);
+      releaseTexture(photo.src);
     };
-  }, [month.coverImage]);
+  }, [photo.src]);
 
   useFrame(() => {
     const node = mesh.current;
-    const mat = material.current;
-    if (!node || !mat) return;
+    if (!node) return;
 
-    const offset = index - scrollState.runner;
-    const distance = Math.abs(offset);
-    // Square-on and centred while it owns the screen, swinging out either side
-    // of that.
-    const swing = THREE.MathUtils.smoothstep(distance, 0.2, 1.3);
-
-    node.position.set(lane * LATERAL * swing, lift + offset * 0.22, -offset * SPACING);
-    node.rotation.y = -lane * 0.5 * swing;
-    node.rotation.z = lane * 0.06 * swing;
-
-    const appear = 1 - THREE.MathUtils.smoothstep(offset, 2.2, 3.4);
-    const passed = 1 - THREE.MathUtils.smoothstep(-offset, 0.55, 1.3);
-    const opacity = appear * passed;
-
-    mat.opacity = opacity;
-    // Hidden while its own drawer is open — the flight overlay stands in for it.
-    node.visible = opacity > 0.01 && !hidden;
+    const z = scrollState.depth - photo.depth;
+    node.position.set(photo.x * spread, photo.y * spread, z);
+    node.visible = z < PASSED && !hidden;
+    // Fog handles distance; this only covers the first moments past the lens,
+    // where the run is being revealed rather than flown through.
+    if (material.current) material.current.opacity = gateOpacity(scrollState.depth);
   });
 
   /**
@@ -90,10 +79,10 @@ export function MonthCard({
    */
   function screenRect(node: THREE.Mesh): CardRect {
     const half = [
-      [-width / 2, -height / 2],
-      [width / 2, -height / 2],
-      [-width / 2, height / 2],
-      [width / 2, height / 2],
+      [-0.5, -0.5],
+      [0.5, -0.5],
+      [-0.5, 0.5],
+      [0.5, 0.5],
     ] as const;
 
     let minX = Infinity;
@@ -128,34 +117,38 @@ export function MonthCard({
     pointerDown.current = null;
     if (!start || !mesh.current) return;
 
-    // A drag that happened to start on a card is a scroll, not a tap.
+    // A drag that happened to start on a photo is a scroll, not a tap.
     const travel = Math.hypot(event.clientX - start.x, event.clientY - start.y);
     if (travel > 10 || event.timeStamp - start.time > 500) return;
-    // Only the card the reader is actually looking at opens.
-    if (Math.abs(index - scrollState.runner) > TAP_RANGE) return;
+    // Only a photo the reader is actually looking at opens.
+    if (Math.abs(scrollState.depth - photo.depth) > TAP_RANGE) return;
 
     event.stopPropagation();
-    expandMonth(month.id, screenRect(mesh.current));
+    expandMonth(photo.monthId, screenRect(mesh.current));
   }
 
-  if (!texture) return null;
+  if (!texture || !image) return null;
 
   return (
     <mesh
       ref={mesh}
       visible={false}
+      scale={[width * scale, height * scale, 1]}
+      rotation={[0, 0, photo.roll]}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
     >
-      <planeGeometry args={[width, height]} />
+      <planeGeometry args={[1, 1]} />
       <meshBasicMaterial
         ref={material}
         map={texture}
         transparent
-        // Cards overlap as they pass; letting them write depth would punch
+        // Photos overlap as they pass; letting them write depth would punch
         // holes in whatever is behind them.
         depthWrite={false}
         toneMapped={false}
+        // Fog is what makes them emerge from the distance.
+        fog
       />
     </mesh>
   );
