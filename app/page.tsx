@@ -20,13 +20,6 @@ export default function Home() {
       <MonthRunner />
       <MonthTitleRunner />
 
-      {/* Photos pass low across the screen; this keeps the copy legible under
-          them without dimming the photograph itself. */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-[5] h-2/5 bg-gradient-to-t from-ink via-ink/80 to-transparent"
-      />
-
       <AfterLens>
         <ProgressHeader />
         <SideNav />
