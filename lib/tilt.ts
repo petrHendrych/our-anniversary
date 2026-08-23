@@ -36,6 +36,8 @@ const clamp = (value: number) => Math.max(-LIMIT, Math.min(LIMIT, value));
 /** Device attitude when tilt started — everything is measured against it. */
 let baseline: { beta: number; gamma: number } | null = null;
 let listening = false;
+/** True while a card is open: the camera holds still so the card lands centred. */
+let suspended = false;
 
 type OrientationPermission = "granted" | "denied" | "default";
 interface OrientationCtor {
@@ -57,6 +59,7 @@ function notify() {
 }
 
 function handlePointer(event: PointerEvent) {
+  if (suspended) return;
   // Touch drags are scrolling; only a real pointer aims the camera.
   if (event.pointerType !== "mouse") return;
   tiltTarget.y = -(event.clientX / window.innerWidth - 0.5) * MOUSE_RANGE;
@@ -64,6 +67,7 @@ function handlePointer(event: PointerEvent) {
 }
 
 function handleOrientation(event: DeviceOrientationEvent) {
+  if (suspended) return;
   const beta = event.beta ?? 0;
   const gamma = event.gamma ?? 0;
   // First reading is however the phone happened to be held; that is level.
@@ -110,6 +114,21 @@ export async function requestGyro(): Promise<boolean> {
 /** Re-levels the tilt to however the phone is being held right now. */
 export function levelTilt(): void {
   baseline = null;
+}
+
+/**
+ * Holds the camera still while a card is open.
+ *
+ * It freezes rather than levels: a focused print is placed in camera space (see
+ * lib/focus-layout), so it is centred whatever angle the camera was left at,
+ * and swinging the whole scene back to level on every tap would be motion for
+ * nothing. Releasing re-levels, because the phone has almost certainly moved
+ * while the card was being looked at.
+ */
+export function suspendTilt(on: boolean): void {
+  if (suspended === on) return;
+  suspended = on;
+  if (!on) levelTilt();
 }
 
 /** True while the reader could still turn tilt on — i.e. iOS, not yet asked. */

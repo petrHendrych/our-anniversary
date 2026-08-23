@@ -88,6 +88,18 @@ body {
   }
 }
 
+/* While a card is open it is the only thing on the page that belongs to that
+   month — the section copy and the flying titles behind it stand down. */
+html[data-focused] main,
+html[data-focused] [data-title-runner] {
+  opacity: 0;
+}
+
+main,
+[data-title-runner] {
+  transition: opacity 300ms ease;
+}
+
 :focus-visible {
   outline: 1px solid var(--lit);
   outline-offset: 3px;

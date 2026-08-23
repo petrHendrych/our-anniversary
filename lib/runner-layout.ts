@@ -71,8 +71,13 @@ export function gateOpacity(depth: number): number {
  * desktop, tilting the phone otherwise.
  */
 const CORNER = 640;
-/** Longest edge of a photo, before the narrow-screen scale. */
-const BASE_SIZE = 700;
+/**
+ * Longest edge of a card, before the narrow-screen scale. A card is a print,
+ * so this covers the paper and its border as well as the photograph — it is
+ * larger than the bare-photo size it replaced so the picture inside stays
+ * roughly the size it always was.
+ */
+const BASE_SIZE = 780;
 
 /**
  * Photo *size* is designed at 1400px wide and scaled down from there, which is
@@ -98,6 +103,8 @@ export interface RunnerPhoto {
   key: string;
   src: string;
   monthId: string;
+  /** Set into the print's bottom border. */
+  caption: string;
   /** Index into `months` — the month this photo belongs to. */
   monthIndex: number;
   /** Index into `photos` — position along the whole run. */
@@ -173,6 +180,9 @@ const monthSpans: number[] = [];
         key: src,
         src,
         monthId: month.id,
+        // The cover carries the month's title; a gallery photo says its own
+        // thing if it has one, and falls back to the title if it does not.
+        caption: i === 0 ? month.title : (month.gallery[i - 1].caption ?? month.title),
         monthIndex,
         photoIndex: photos.length,
         // Jitter is under half a step, so photo depths stay strictly ascending

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { PerspectiveCamera } from "@react-three/drei";
 import * as THREE from "three";
@@ -12,6 +12,7 @@ import {
   useEntered,
   useNearestPhotoIndex,
 } from "@/lib/scroll-store";
+import { useSlideshowOpen } from "@/lib/focus-store";
 import { openingPalette, paletteFor } from "@/lib/palette";
 import { CAMERA_Z, FOG_FAR, FOG_NEAR, runnerPhotos } from "@/lib/runner-layout";
 
@@ -71,6 +72,27 @@ function Photos() {
     .map((photo) => <MonthCard key={photo.key} photo={photo} />);
 }
 
+/**
+ * Stops the render loop while the slideshow is up.
+ *
+ * Nothing in the scene is moving by then — scroll is stopped and the open card
+ * has landed — and the phone is busy decoding full-screen photographs, which is
+ * exactly the budget the texture window exists to protect. Done from inside the
+ * Canvas rather than through its `frameloop` prop so the whole scene does not
+ * re-render, and by pausing rather than unmounting so no texture is disposed
+ * and re-baked on the way back.
+ */
+function FrameloopGate() {
+  const setFrameloop = useThree((state) => state.setFrameloop);
+  const paused = useSlideshowOpen();
+
+  useEffect(() => {
+    setFrameloop(paused ? "never" : "always");
+  }, [paused, setFrameloop]);
+
+  return null;
+}
+
 export function MonthRunnerScene() {
   return (
     // Pointer events stay on so photos can be tapped; the DOM text layer above
@@ -83,6 +105,7 @@ export function MonthRunnerScene() {
       >
         {/* Photos surface out of the page colour instead of popping in. */}
         <MonthFog />
+        <FrameloopGate />
         <PixelCamera />
         <CameraTilt />
         <IntroCamera />

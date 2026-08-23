@@ -72,7 +72,11 @@ export function MonthTitleRunner() {
   }, []);
 
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 z-[3] overflow-hidden">
+    <div
+      aria-hidden
+      data-title-runner
+      className="pointer-events-none fixed inset-0 z-[3] overflow-hidden"
+    >
       {months.map((month, i) => {
         const year = years.find((block) => block.year === month.year);
         return (
