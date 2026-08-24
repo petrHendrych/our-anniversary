@@ -2,45 +2,22 @@
  * Generates placeholder photos for the mock timeline so the layout has real
  * images to render against before the actual photos exist.
  *
+ * It reads data/timeline.ts directly — Node strips the types — so the pictures
+ * on disk can never drift from the events the site expects. Every event gets
+ * its own folder: a cover, which is the card that flies in the run, and the
+ * photographs behind it, which belong to that event alone.
+ *
  * Delete this script (and public/images/*) once real, pre-resized photos land.
  *
  *   node scripts/generate-placeholders.mjs
  */
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import sharp from "sharp";
-
-// Keep in sync with data/timeline.ts: same start month, same count, same
-// photos-per-month rule, so every month the timeline names has pictures.
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-const START_YEAR = 2024;
-const START_MONTH = 9;
-const MONTH_COUNT = 24;
-const WRITTEN_PHOTOS = {
-  "2024-09": 5,
-  "2024-12": 4,
-  "2025-04": 5,
-  "2025-09": 7,
-  "2026-01": 6,
-  "2026-05": 6,
-};
-
-const MONTHS = Array.from({ length: MONTH_COUNT }, (_, i) => {
-  const offset = START_MONTH - 1 + i;
-  const year = START_YEAR + Math.floor(offset / 12);
-  const monthIndex = (offset % 12) + 1;
-  const id = `${year}-${String(monthIndex).padStart(2, "0")}`;
-  const label = `${MONTH_NAMES[monthIndex - 1]} ${year}`;
-  const count = WRITTEN_PHOTOS[id] ?? 3 + (i % 3);
-  // Walk the hue wheel so neighbouring months never look like the same place.
-  return [id, label, count, (i * 47) % 360, (i * 47 + 52) % 360];
-});
+import { timeline } from "../data/timeline.ts";
 
 // Longest edge stays under the 1500-2000px cap from REQUIREMENTS.md.
 const COVER = { w: 1200, h: 1600 };
-const GALLERY = { w: 1000, h: 1000 };
+const PHOTO = { w: 1000, h: 1000 };
 
 function gradient({ w, h }, hueA, hueB, label) {
   return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
@@ -57,19 +34,34 @@ function gradient({ w, h }, hueA, hueB, label) {
   </svg>`);
 }
 
-for (const [id, label, count, hueA, hueB] of MONTHS) {
-  const dir = `public/images/${id}`;
-  await mkdir(dir, { recursive: true });
+/** Strips the leading slash: /images/... is a URL, public/images/... is a path. */
+const pathFor = (src) => `public${src}`;
 
-  await sharp(gradient(COVER, hueA, hueB, label))
+// Anything left from an earlier shape of the data would just sit there unused.
+await rm("public/images", { recursive: true, force: true });
+
+const events = timeline.flatMap((year) => year.months.flatMap((month) => month.events));
+
+let i = 0;
+for (const event of events) {
+  // Walk the hue wheel so neighbouring events never look like the same place.
+  const hueA = (i * 47) % 360;
+  const hueB = (i * 47 + 52) % 360;
+  i++;
+
+  await mkdir(pathFor(`/images/${event.monthId}/${event.slug}`), { recursive: true });
+
+  await sharp(gradient(COVER, hueA, hueB, event.title))
     .jpeg({ quality: 82 })
-    .toFile(`${dir}/cover.jpg`);
+    .toFile(pathFor(event.cover.src));
 
-  for (let i = 1; i <= count; i++) {
-    const n = String(i).padStart(2, "0");
-    await sharp(gradient(GALLERY, hueA + i * 6, hueB - i * 4, `${label} · ${n}`))
+  let n = 1;
+  for (const photo of event.photos) {
+    await sharp(gradient(PHOTO, hueA + n * 6, hueB - n * 4, `${event.title} · ${String(n).padStart(2, "0")}`))
       .jpeg({ quality: 80 })
-      .toFile(`${dir}/${n}.jpg`);
+      .toFile(pathFor(photo.src));
+    n++;
   }
-  console.log(`${id}: cover + ${count} gallery`);
+
+  console.log(`${event.id}: cover + ${event.photos.length}`);
 }

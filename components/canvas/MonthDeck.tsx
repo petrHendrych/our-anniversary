@@ -9,7 +9,7 @@ import {
   focusState,
   releaseFocus,
   settleDeck,
-  useFocusedMonthId,
+  useFocusedEventId,
 } from "@/lib/focus-store";
 import { FOCUS_DISTANCE, focusPose } from "@/lib/focus-layout";
 import { deckSeed, pilePose, ringOffset } from "@/lib/deck-layout";
@@ -17,13 +17,12 @@ import {
   CAMERA_Z,
   gateOpacity,
   holdScale,
-  photosForMonth,
+  photosForEvent,
   planeScale,
   spreadScale,
   type RunnerPhoto,
 } from "@/lib/runner-layout";
 import { acquireCardTexture, releaseCardTexture } from "@/lib/card-texture";
-import { getMonthIndex } from "@/lib/timeline";
 
 /** Share of the screen a finger has to travel to turn the deck by one card. */
 const SWIPE_SPAN = 0.55;
@@ -47,32 +46,34 @@ const focusQ = new THREE.Quaternion();
 const leanQ = new THREE.Quaternion();
 
 /**
- * The month a card was tapped in, held in front of the reader as a deck.
+ * The event whose card was tapped, held in front of the reader as a deck.
+ *
+ * A card is one event, and the deck is that event's own photographs — its
+ * cover first, then pictures that appear nowhere else on the page. The card
+ * next to it in the run is a different event with a different set entirely.
  *
  * The tapped card's flight out is *not* this component's — the run card flies
- * itself, exactly as it always has. The deck mounts as soon as the month opens
+ * itself, exactly as it always has. The deck mounts as soon as the card opens
  * so its textures are ready, but draws nothing until that flight lands. At
  * that instant it takes over: its front card is at the identical pose, holding
  * the identical texture, with `spread` still at zero, so the swap cannot be
- * seen. From there the pile fans out and the deck owns everything, including
- * the flight home — which by then may be a different photograph's.
+ * seen. From there the pile fans out and the deck owns everything, the flight
+ * home included.
  *
  * It has to own the cycling, because after one swipe the card at the front is
- * a different photograph, and half a month's photographs are not mounted in
- * the run's own window at all.
+ * a photograph the run never held at all — only the cover was ever out there.
  *
- * A deck card at `t = 0` reproduces its run pose exactly, which is what makes
- * the handover invisible at the other end too.
+ * Every card in the deck flies home to the cover's slot in the run, because
+ * that is the one place this event occupies; closing winds the deck back to
+ * the cover first (see releaseFocus), so what lands is the card that was
+ * tapped, at exactly the pose it left.
  */
 export function MonthDeck() {
-  const monthId = useFocusedMonthId();
-  const photos = useMemo(
-    () => (monthId ? photosForMonth(getMonthIndex(monthId)) : []),
-    [monthId],
-  );
-  const dragged = useDeckGestures(monthId, photos.length);
+  const eventId = useFocusedEventId();
+  const photos = useMemo(() => photosForEvent(eventId), [eventId]);
+  const dragged = useDeckGestures(eventId, photos.length);
 
-  if (!monthId || photos.length === 0) return null;
+  if (!eventId || photos.length === 0) return null;
 
   return (
     <group
@@ -101,7 +102,7 @@ export function MonthDeck() {
 
 /**
  * Drag, flick, dismiss and arrow keys, bound to the canvas for as long as a
- * month is open. The listeners sit on the canvas element rather than on the
+ * card is open. The listeners sit on the canvas element rather than on the
  * cards so a swipe works anywhere on screen, not only where a photograph
  * happens to be.
  *
@@ -109,12 +110,12 @@ export function MonthDeck() {
  * here — FocusMode marks <html> while a deck is open and app/globals.css takes
  * `touch-action` off the canvas from there.
  */
-function useDeckGestures(monthId: string | null, count: number) {
+function useDeckGestures(eventId: string | null, count: number) {
   const canvas = useThree((state) => state.gl.domElement);
   const dragged = useRef(false);
 
   useEffect(() => {
-    if (!monthId || count === 0) return;
+    if (!eventId || count === 0) return;
 
     let drag: { x: number; y: number; cursor: number; time: number } | null = null;
     const span = () => Math.max(160, window.innerWidth * SWIPE_SPAN);
@@ -186,7 +187,7 @@ function useDeckGestures(monthId: string | null, count: number) {
       window.removeEventListener("pointercancel", onUp);
       window.removeEventListener("keydown", onKey);
     };
-  }, [canvas, monthId, count]);
+  }, [canvas, eventId, count]);
 
   return dragged;
 }

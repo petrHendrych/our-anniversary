@@ -12,6 +12,7 @@ import {
   holdScale,
   passOpacity,
   PASS_NEAR,
+  photosForEvent,
   planeScale,
   spreadScale,
   type RunnerPhoto,
@@ -47,10 +48,11 @@ const restQ = new THREE.Quaternion();
  * Distance fade is the scene's fog, not per-card opacity, so photos surface
  * out of the background colour instead of cross-dissolving over it.
  *
- * Tapping one flies it out of the run and holds it in front of the reader —
- * and that flight is this card's own, not the deck's. Only once it has landed
- * does MonthDeck take over, at the identical pose, to fan the rest of the
- * month out behind it and let the reader swipe through them.
+ * One card is one event. Tapping it flies it out of the run and holds it in
+ * front of the reader — and that flight is this card's own, not the deck's.
+ * Only once it has landed does MonthDeck take over, at the identical pose, to
+ * fan out that event's own photographs behind it. Those pictures are nowhere
+ * in the run: the next card along is a different event entirely.
  */
 export function MonthCard({ photo }: { photo: RunnerPhoto }) {
   const mesh = useRef<THREE.Mesh>(null);
@@ -94,7 +96,7 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
     const w = width * scale;
     const h = height * scale;
     // This card flies only until the deck takes over; from then on the deck
-    // draws every photograph of the open month, this one included.
+    // draws this event's photographs, its own copy of this one included.
     const t =
       focusState.key === photo.key && !focusState.handed ? focusState.t : 0;
 
@@ -112,7 +114,7 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
       // Whatever is open takes the run's attention with it: the rest of the
       // photographs fall back into the haze and dim, rather than the open card
       // having to be lit against them.
-      const away = focusState.monthId ? focusState.t : 0;
+      const away = focusState.eventId ? focusState.t : 0;
       node.position.copy(rest);
       node.position.z -= RECEDE * away;
       node.rotation.z = photo.roll;
@@ -121,8 +123,9 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
         // Drawn all the way in: a photo is only gone once it has crossed the
         // camera, not while it is still large and mid-screen.
         distance > PASS_NEAR &&
-        // Once handed over, the deck holds this month's copies.
-        !(focusState.handed && focusState.monthId === photo.monthId);
+        // Once handed over, the deck holds this event's own copy of it. Only
+        // this card steps aside — the rest of the run stays out there, dimmed.
+        !(focusState.handed && focusState.eventId === photo.eventId);
       if (node.renderOrder !== 0) {
         node.renderOrder = 0;
         surface.depthTest = true;
@@ -172,7 +175,7 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
     pointerDown.current = null;
     if (!start || !mesh.current) return;
     // One deck at a time; while one is open, a tap out here closes it instead.
-    if (focusState.monthId) return;
+    if (focusState.eventId) return;
 
     // A drag that happened to start on a photo is a scroll, not a tap.
     const travel = Math.hypot(event.clientX - start.x, event.clientY - start.y);
@@ -181,7 +184,12 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
     if (Math.abs(scrollState.depth - photo.depth) > TAP_RANGE) return;
 
     event.stopPropagation();
-    focusCard(photo.key, photo.monthId, photo.slide);
+    focusCard(
+      photo.key,
+      photo.eventId,
+      photo.monthId,
+      photosForEvent(photo.eventId).length,
+    );
   }
 
   if (!texture || !image) return null;

@@ -2,9 +2,10 @@
 
 A scroll-driven, 3D anniversary website — a "month runner" of printed photo
 cards flying past in WebGL as you scroll through two years together, grouped
-by year. Tap a card and it lifts out of the run and holds still in front of
-you, with the rest of that month shuffled into a deck behind it — swipe to
-cycle through them. All of it stays in the 3D scene.
+by year. Each card is one event — a night, a trip, a day worth keeping. Tap it
+and it lifts out of the run and holds still in front of you, with that event's
+own photographs, which are nowhere else on the page, shuffled into a deck
+behind it — swipe to cycle through them. All of it stays in the 3D scene.
 
 Built as a personal one-off project, viewed on a couple of specific phones —
 see `REQUIREMENTS.md` for why that shapes a few technical decisions.
@@ -40,15 +41,20 @@ Open http://localhost:3000.
 
 ## Adding your own content
 All timeline content lives in `data/timeline.ts` as a typed array of
-`YearBlock` objects (years → months → photos). See `REQUIREMENTS.md` for the
-full shape. To add a month:
+`YearBlock` objects (years → months → events → photos). See `REQUIREMENTS.md`
+for the full shape. An event is one thing that happened: its cover is the card
+that flies in the run, and its photos are the deck that card opens into. To add
+one:
 
-1. Drop resized photos (long edge ~1500–2000px) into `public/images/`.
-2. Add a `Month` entry with a `coverImage`, `title`, `summary`, and a
-   `gallery` array for the deck. `title` is what gets printed along the
-   bottom border of the month's cover card; a gallery photo's own `caption`
-   is printed on its card, falling back to the month title.
-3. Optionally add `notes`, `date`, and `location`.
+1. Drop resized photos (long edge ~1500–2000px) into
+   `public/images/<month-id>/<event-slug>/` — `cover.jpg` plus `01.jpg`,
+   `02.jpg`, and so on.
+2. Add an entry to that month's `events`, with a `slug`, a `title`, and how
+   many `photos` it has. `title` is what gets printed along the bottom border
+   of the card; a photo's own `caption` is printed on its card in the deck,
+   falling back to the event title.
+3. Optionally add `notes`, `date`, and `location` — to the event, the month,
+   or both.
 
 No CMS, no database — it's all in that one file by design.
 
@@ -58,7 +64,7 @@ No `src/` — the app sits at the repo root, and `@/*` maps to `./*`.
 ```
 app/              Next.js routes, global styles
 components/
-  canvas/         The R3F/Three.js month-runner scene and the open-month deck
+  canvas/         The R3F/Three.js month-runner scene and the open-card deck
   layout/         Year headers, side nav, progress header, flying titles
   focus/          Housekeeping while a deck is open — stops Lenis and the tilt
 data/             timeline.ts — all content
@@ -79,8 +85,8 @@ Deploys to a generated `*.vercel.app` URL — no custom domain configured.
   `lib/card-texture.ts`, which also bakes each card's printed frame and
   downsamples the photograph on its way into the texture. Call
   `residentTextureCount()` from the console when profiling.
-- Opening a month mounts its whole deck (four to eight cards) on top of the
-  run's own window. They share textures with any run cards already holding
-  them, but a month whose photos have scrolled out will bake a few at once.
+- Opening a card mounts that event's whole deck (four to eight cards) on top
+  of the run's own window. Only its cover is already baked from the run, so
+  the rest bake at once — which is why an event's photo set stays small.
 - Built and tuned against a specific known device pair rather than a broad
   compatibility matrix — see `REQUIREMENTS.md`.

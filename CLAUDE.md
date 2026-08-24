@@ -5,11 +5,14 @@ Guidance for Claude Code working in this repository. Read this and
 
 ## Project in one paragraph
 A scroll-driven anniversary website: a WebGL "month runner" (photos as 3D
-cards flying past as the user scrolls, grouped by year) layered with a DOM
-overlay for text and a side timeline nav. Tapping a card lifts it out of the
-run and holds it in front of the reader, with the rest of that month fanned
-out behind it as a shuffled deck the reader swipes through — that whole
-interaction stays in the 3D scene, captions included. Viewed by ~2 people on
+cards flying past as the user scrolls, grouped by month and year) layered with
+a DOM overlay for text and a side timeline nav. **One card is one event** — a
+night, a trip, a day worth keeping — and a month is however many events it
+holds. Tapping a card lifts it out of the run and holds it in front of the
+reader, with that event's *own* photographs fanned out behind it as a shuffled
+deck the reader swipes through. Those pictures are in the run nowhere: the
+next card along opens a completely different set. That whole interaction stays
+in the 3D scene, captions included. Viewed by ~2 people on
 modern iPhones/Android flagships — optimize for "buttery smooth on those exact
 devices," not broad compatibility.
 
@@ -52,15 +55,19 @@ devices," not broad compatibility.
    `lib/focus-layout.ts`.
 5. **The tapped card flies itself; the deck takes over when it lands.**
    `MonthCard` owns the zoom, start to finish — that path is deliberately
-   untouched. `MonthDeck` mounts as soon as the month opens so its textures
+   untouched. `MonthDeck` mounts as soon as the card opens so its textures
    are ready, but draws nothing until `focusState.handed`, at which point its
    front card is at the identical pose holding the identical texture, so the
    swap cannot be seen. It has to take over, because after one swipe the front
-   card is a different photograph and half a month is not mounted in the run.
-   The two poses agree by algebra, not by luck: the deck's front-card path is
+   card is a photograph the run never held at all. The two poses agree by
+   algebra, not by luck: the deck's front-card path is
    `lerp(target, rest, 1 - t)` where MonthCard's is `lerp(rest, target, t)`.
+   Only the cover has a slot in the run, so closing winds the cursor back to
+   it (`releaseFocus`) before the flight home starts — the card that lands is
+   the card that was tapped, and the deck's extra photographs inherit the
+   cover's run pose only so the maths has somewhere to point.
 6. **The deck is one float.** `focusState.cursor` is a continuous, *unwrapped*
-   position around the month's ring of photographs; every card derives its
+   position around the event's ring of photographs; every card derives its
    whole pose from `ringOffset()` and `pilePose()` (`lib/deck-layout.ts`).
    Cycling loops for ever, and the seam where the ring index jumps is
    invisible only because both ends of the range describe the same pose — far
@@ -68,8 +75,10 @@ devices," not broad compatibility.
    one without the other makes the deck blink once per lap.
 7. **Texture budget matters even on flagship phones.** Mobile Safari has a
    real WebGL memory ceiling independent of chip speed. Never mount textures
-   for all months at once. Maintain a sliding window (current ± a few
-   months) and dispose textures for anything scrolled far out of range.
+   for the whole run at once. Maintain a sliding window (the nearest few
+   cards) and dispose textures for anything scrolled far out of range. An
+   event's photographs are mounted only while its card is open, and all of
+   them at once — which is the reason to keep a set small.
 8. **The loading gate counts real work, and it is the page's one guaranteed
    tap.** `lib/preload-store.ts` tracks a fixed list — the display face, the
    scene's first frame, and the first few photographs baked into cards — so the
@@ -140,7 +149,7 @@ components/
   canvas/
     MonthRunnerScene.tsx    # R3F Canvas, pixel camera, fog, mount window
     MonthCard.tsx           # one print in the run; flies the tapped one out
-    MonthDeck.tsx           # takes over once it lands: pile, swipe, tap-to-pick
+    MonthDeck.tsx           # takes over once it lands: the event's own photos
     IntroCamera.tsx
     CameraTilt.tsx
   layout/                   # year headers, side nav, progress header, titles
@@ -149,13 +158,13 @@ components/
   focus/
     FocusMode.tsx           # draws nothing; stops Lenis and the tilt
 data/
-  timeline.ts               # YearBlock[] — see REQUIREMENTS.md for shape
+  timeline.ts               # YearBlock[] -> Month[] -> MemoryEvent[] -> photos
 lib/
   scroll-store.ts           # scroll progress; `depth` never notifies
-  focus-store.ts            # which month is open; `t`/`spread`/`cursor` never notify
+  focus-store.ts            # which card is open; `t`/`spread`/`cursor` never notify
   focus-layout.ts           # where the front card of a deck lands
   deck-layout.ts            # the ring: where each card sits behind the front one
-  runner-layout.ts          # all 3D placement maths
+  runner-layout.ts          # all 3D placement maths; builds each event's deck
   card-texture.ts           # bakes the printed frame; sliding-window cache
   preload-store.ts          # what must be ready before the gate opens
   tilt.ts, timeline.ts, palette.ts

@@ -19,10 +19,11 @@ devices," not for compatibility or scale.
 Two layers, working together:
 
 1. **The Month Runner (WebGL / Three.js).** The primary scroll experience.
-   As the user scrolls, month "cards" (textured planes, using each month's
+   As the user scrolls, event "cards" (textured planes, using each event's
    cover photo) move through 3D space — tilting, scaling, and passing near
    the camera — in the spirit of `2018.craftedbygc.com`. Organized
-   chronologically, grouped by year.
+   chronologically, grouped into months and years. A month contributes one
+   card per event it holds, so a busy month is several cards in a row.
 2. **The DOM overlay.** Sits on top of / alongside the canvas. Handles:
    - The loading gate, which is the whole first screen and lifts away upwards
      when the reader taps Enter. Behind it the intro is the 3D camera alone.
@@ -51,16 +52,19 @@ Tapping/clicking a card:
 - Lifts that same card out of the run — it is still the same mesh — and holds
   it in front of the reader, face-on, filling most of the screen. The rest of
   the run falls back into the haze and dims behind it.
-- The rest of that month's photographs then fan out **behind** the open card
-  as a shuffled deck, leaning alternately left and right, each one further
-  back, smaller and slightly rotated, peeking out at the sides.
+- That event's *own* photographs then fan out **behind** the open card as a
+  shuffled deck, leaning alternately left and right, each one further back,
+  smaller and slightly rotated, peeking out at the sides. They belong to that
+  card alone — they are not in the run, and the next card along in the same
+  month opens a completely different set.
 - Swiping horizontally turns the deck. The card at the front slides away and
   tucks in at the very back; the next one takes its place. It loops for ever
   in both directions, and a flick turns exactly one card.
 - Tapping a photograph peeking out of the pile brings it to the front.
-- Tapping empty space, pressing Escape, or swiping down flies the card at the
-  front back to its own place in the run and resumes the main scroll where it
-  left off.
+- Tapping empty space, pressing Escape, or swiping down winds the deck back
+  to the event's cover and flies it home to its place in the run — the cover
+  is the only one of the event's photographs that has a place there — then
+  resumes the main scroll where it left off.
 
 There is no DOM in the open state at all — no copy, no buttons, no chrome.
 Each photograph's caption is printed into its own card, so the text is in the
@@ -72,9 +76,21 @@ All content is static and hand-authored — no CMS, no backend.
 ```ts
 interface MemoryPhoto {
   id: string;
-  src: string;       // path under /public/images/...
+  src: string;       // path under /public/images/<month>/<event>/...
   alt: string;
-  caption?: string;
+  caption?: string;  // printed on this photo's card; falls back to the event title
+}
+
+interface MemoryEvent {
+  id: string;             // "2024-09/the-bridge"
+  monthId: string;        // "2024-09"
+  slug: string;           // "the-bridge" — the folder its photos live in
+  title: string;          // printed along the bottom of the card in the run
+  cover: MemoryPhoto;     // the card that flies in the run
+  photos: MemoryPhoto[];  // the deck it opens into — in the run nowhere
+  date?: string;
+  location?: string;
+  notes?: string;         // longer story text (not shown yet — see below)
 }
 
 interface Month {
@@ -82,12 +98,11 @@ interface Month {
   year: number;           // 2024
   monthIndex: number;     // 1-12
   monthLabel: string;     // "March"
-  coverImage: string;     // used by the 3D card
   title: string;          // short milestone title, e.g. "Our First Trip"
-  summary: string;        // 1-2 sentence teaser shown on the card itself
+  summary: string;        // 1-2 sentence teaser shown in the DOM overlay
+  events: MemoryEvent[];  // one card each in the run
   date?: string;          // specific date, if there's one headline event
   location?: string;
-  gallery: MemoryPhoto[]; // the rest of the deck behind the cover
   notes?: string;         // longer story text (not shown yet — see below)
 }
 
@@ -116,9 +131,10 @@ interface YearBlock {
    Cap the longest edge around 1500–2000px. A 4000px original gains nothing
    on a phone screen and burns GPU memory. The card baker downsamples again
    on its way into the texture, so the ceiling there is what actually binds.
-2. **Never load all months' textures at once.** Keep a sliding window of
-   textures loaded (current month ± a few), dispose textures for cards that
-   have scrolled far out of range.
+2. **Never load all the textures at once.** Keep a sliding window of card
+   textures loaded (the nearest few in the run), dispose textures for cards
+   that have scrolled far out of range, and keep an event's photo set small —
+   opening a card bakes all of it at once.
 3. **One scroll source of truth.** Lenis drives the real page scroll;
    GSAP ScrollTrigger reads that scroll and drives both (a) the 3D card
    transforms and (b) the DOM nav/year-header state. Don't let the 3D canvas
@@ -142,7 +158,8 @@ still wanted; where it goes is undecided.
   focus) — not a WCAG compliance target.
 
 ## Content you need to gather before/while building
-- Final list of months with at least a cover photo and short title/summary.
-- Full photo sets for each month's deck.
+- The events worth a card, month by month — each needs a name and a cover.
+- A photo set per event: the pictures that belong to that one thing only.
 - Any specific dates/locations worth calling out.
-- Freeform notes/story text per month (optional, can be added incrementally).
+- Freeform notes/story text per event or month (optional, can be added
+  incrementally).

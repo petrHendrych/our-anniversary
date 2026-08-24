@@ -1,13 +1,17 @@
 "use client";
 
 /**
- * Which month the reader has tapped open, and where the deck has been spun to.
+ * Which card the reader has tapped open, and where its deck has been spun to.
+ *
+ * A card is one event, and an event carries its own photographs — so what is
+ * open is an event, not a month. `monthId` is kept alongside it because the
+ * page around the run still asks which month it is looking at.
  *
  * Same shape as lib/scroll-store, and for the same reason: `t`, `spread` and
  * `cursor` all change every frame — the first two while the deck flies in and
  * out, the third under the reader's finger — and are only ever read from
- * inside the render loop, so they update silently. Only `monthId` notifies,
- * because that is the one thing React has to mount and unmount on.
+ * inside the render loop, so they update silently. Only `eventId` and
+ * `monthId` notify, because those are the things React has to mount on.
  *
  * GSAP owns the easing. Its ticker is already the page's only clock, so
  * tweening this object costs no new loop.
@@ -16,6 +20,9 @@ import { useSyncExternalStore } from "react";
 import gsap from "gsap";
 
 interface FocusState {
+  /** The event whose card was tapped — the deck is its photographs. */
+  eventId: string | null;
+  /** The month that event belongs to. */
   monthId: string | null;
   /**
    * RunnerPhoto.key of the card that was tapped. The run card itself flies
@@ -25,13 +32,12 @@ interface FocusState {
   key: string | null;
   /**
    * False while the tapped run card is still flying; true from the moment it
-   * lands until the month is closed. The deck draws nothing before it, and
-   * everything after it — including the flight home, which by then may be a
-   * different photograph's.
+   * lands until the card is closed. The deck draws nothing before it, and
+   * everything after it.
    */
   handed: boolean;
-  /** Index within the month's photos of the card that was tapped. */
-  origin: number;
+  /** How many photographs the open deck has, cover included. */
+  count: number;
   /**
    * Position around the deck. Deliberately *not* wrapped: it runs negative or
    * past the end and only the ring maths folds it back, which is what keeps a
@@ -47,10 +53,11 @@ interface FocusState {
 }
 
 const state: FocusState = {
+  eventId: null,
   monthId: null,
   key: null,
   handed: false,
-  origin: 0,
+  count: 0,
   cursor: 0,
   t: 0,
   spread: 0,
@@ -74,13 +81,21 @@ function subscribe(listener: () => void): () => void {
 /** Live, mutable read for animation loops. Never mutate from outside. */
 export const focusState: Readonly<FocusState> = state;
 
-export function focusCard(key: string, monthId: string, origin: number): void {
-  if (state.monthId || closing) return;
+export function focusCard(
+  key: string,
+  eventId: string,
+  monthId: string,
+  count: number,
+): void {
+  if (state.eventId || closing) return;
+  state.eventId = eventId;
   state.monthId = monthId;
   state.key = key;
   state.handed = false;
-  state.origin = origin;
-  state.cursor = origin;
+  state.count = count;
+  // A deck always opens on its own cover: that is the card that was tapped,
+  // and the only one of the event's photographs that was ever in the run.
+  state.cursor = 0;
   state.landed = false;
   notify();
 
@@ -103,30 +118,39 @@ export function focusCard(key: string, monthId: string, origin: number): void {
 }
 
 export function releaseFocus(): void {
-  if (!state.monthId || closing) return;
+  if (!state.eventId || closing) return;
   closing = true;
   state.landed = false;
 
-  // Whichever card is at the front is the one that flies home, so the deck is
-  // squared up first — closing mid-swipe should not send two cards back.
+  // The card flies home to the slot it came out of, so the card that flies is
+  // the cover — the only photograph of this event that has a slot at all. The
+  // deck is wound back to it first, by the shortest way round: `cursor` is
+  // unwrapped, so any whole lap is the cover again.
   gsap.killTweensOf(state, "cursor");
-  state.cursor = Math.round(state.cursor);
+  const count = Math.max(1, state.count);
+  const cover = Math.round(state.cursor / count) * count;
+  const spin = cover === state.cursor ? 0 : 0.26;
+  if (spin) gsap.to(state, { cursor: cover, duration: spin, ease: "power2.inOut" });
+  else state.cursor = cover;
 
   gsap.killTweensOf(state, "t,spread");
   gsap.to(state, { spread: 0, duration: 0.25, ease: "power2.in" });
   gsap.to(state, {
     t: 0,
     duration: 0.45,
-    delay: 0.1,
+    // Never before the deck is square again: a card halfway round the ring has
+    // no run pose of its own to fly back to.
+    delay: 0.1 + spin,
     ease: "power2.inOut",
     onComplete: () => {
-      // Only now does the month stop being open — its cards have to keep
-      // reading their own flight all the way back into the run.
+      // Only now does the card stop being open — it has to keep reading its
+      // own flight all the way back into the run.
+      state.eventId = null;
       state.monthId = null;
       state.key = null;
       state.handed = false;
+      state.count = 0;
       state.cursor = 0;
-      state.origin = 0;
       closing = false;
       notify();
     },
@@ -141,13 +165,22 @@ export function dragDeck(cursor: number): void {
 
 /** On release: settle on a whole card — the nearest one, or the one asked for. */
 export function settleDeck(to?: number): void {
-  if (!state.monthId) return;
+  if (!state.eventId) return;
   const target = to ?? Math.round(state.cursor);
   gsap.killTweensOf(state, "cursor");
   gsap.to(state, { cursor: target, duration: 0.35, ease: "power2.out" });
 }
 
-/** Re-renders when a month opens and again once it is fully closed. */
+/** Re-renders when a card opens and again once it is fully closed. */
+export function useFocusedEventId(): string | null {
+  return useSyncExternalStore(
+    subscribe,
+    () => state.eventId,
+    () => null,
+  );
+}
+
+/** The month the open card belongs to — what the page around the run asks for. */
 export function useFocusedMonthId(): string | null {
   return useSyncExternalStore(
     subscribe,

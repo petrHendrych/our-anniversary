@@ -6,16 +6,22 @@
  * of N units is N CSS pixels tall when it reaches the camera plane. Every
  * constant below is therefore readable as a pixel measurement.
  *
- * Photos are laid out one behind another down the Z axis, cycling through the
- * four screen corners, so scrolling flies the reader between them rather than
- * past a single centred card. A month is a run of photos plus MONTH_GAP of
- * empty depth after its last one — that gap is the breathing room between one
- * month and the next, and it is why a month with seven photos occupies more
- * scroll than a month with four.
+ * One card flies in the run per *event* — its cover photograph. The rest of an
+ * event's pictures are never in the run at all; they exist only in the deck
+ * that card opens into, which is why tapping two cards in the same month shows
+ * two entirely different sets of photographs.
+ *
+ * Cards are laid out one behind another down the Z axis, scattered around the
+ * frame, so scrolling flies the reader between them rather than past a single
+ * centred card. A month is its run of event cards plus MONTH_GAP of empty
+ * depth after the last one — that gap is the breathing room between one month
+ * and the next, and it is why a month with three events occupies more scroll
+ * than a month with one.
  *
  * Layout is derived from the data and is deterministic, so the server and the
  * client agree and nothing needs recomputing on resize.
  */
+import type { MemoryEvent } from "@/data/timeline";
 import { months } from "@/lib/timeline";
 
 /** Camera distance from the Z=0 plane. Sets the pixels-per-unit mapping. */
@@ -24,14 +30,14 @@ export const CAMERA_Z = 800;
 export const FOG_NEAR = 1900;
 export const FOG_FAR = 3200;
 
-/** Depth between consecutive photos within a month. */
-const PHOTO_STEP = 520;
+/** Depth between consecutive event cards within a month. */
+const EVENT_STEP = 520;
 /**
- * Depth from a month's title to its first photo. Long on purpose: the title
+ * Depth from a month's title to its first card. Long on purpose: the title
  * flies through and is gone before the photographs arrive.
  */
-const PHOTO_LEAD = 950;
-/** Empty depth after a month's last photo, before the next month starts. */
+const EVENT_LEAD = 950;
+/** Empty depth after a month's last card, before the next month starts. */
 const MONTH_GAP = 1250;
 /**
  * The intro: the reader flies up to a camera, through its lens, and only then
@@ -128,13 +134,18 @@ export interface RunnerPhoto {
   key: string;
   src: string;
   monthId: string;
+  /** The event this photograph belongs to. One card per event flies in the run. */
+  eventId: string;
   /** Set into the print's bottom border. */
   caption: string;
   /** Index into `months` — the month this photo belongs to. */
   monthIndex: number;
   /** Index into `photos` — position along the whole run. */
   photoIndex: number;
-  /** Position within its own month — 0 is the cover. Where its deck opens. */
+  /**
+   * Position within its own event — 0 is the cover, which is the card that
+   * flies in the run; everything above 0 exists only inside the deck.
+   */
   slide: number;
   /** Distance from the start of the run. Grows as the reader scrolls. */
   depth: number;
@@ -194,9 +205,41 @@ const photos: RunnerPhoto[] = [];
 const monthDepths: number[] = [];
 /** Depth each month occupies, including its trailing gap. */
 const monthSpans: number[] = [];
-/** Where each month's photos sit in `photos`. They are laid down month by
-    month, so a month is always one contiguous slice. */
-const monthRanges: Array<{ from: number; to: number }> = [];
+/**
+ * The deck each card opens into, by event id. Plain objects only — nothing
+ * here touches a texture, so holding every event's deck costs nothing until a
+ * card is actually tapped and its photographs are asked for.
+ */
+const decks = new Map<string, RunnerPhoto[]>();
+
+/**
+ * The deck a card opens into: its own cover first, then the photographs that
+ * belong to that event and appear nowhere else on the page.
+ *
+ * The first entry is the run card itself — the same object — so the pose the
+ * deck takes over at is identical by construction rather than by arithmetic.
+ * The rest inherit the cover's place in the run, because they have no place of
+ * their own: they were never in it. That is what the deck flies home to.
+ */
+function buildDeck(cover: RunnerPhoto, event: MemoryEvent): RunnerPhoto[] {
+  return [
+    cover,
+    ...event.photos.map((photo, i) => {
+      const random = rng(hash(photo.src));
+      return {
+        ...cover,
+        key: photo.src,
+        src: photo.src,
+        // A photograph says its own thing if it has one, and falls back to the
+        // name of the event it belongs to if it does not.
+        caption: photo.caption ?? event.title,
+        slide: i + 1,
+        size: BASE_SIZE * between(random, 0.86, 1.16),
+        roll: between(random, -0.05, 0.05),
+      };
+    }),
+  ];
+}
 
 {
   // Months start on the far side of the camera; nothing of them exists before it.
@@ -205,38 +248,39 @@ const monthRanges: Array<{ from: number; to: number }> = [];
   months.forEach((month, monthIndex) => {
     monthDepths.push(cursor);
 
-    const sources = [month.coverImage, ...month.gallery.map((photo) => photo.src)];
-    const from = photos.length;
-
-    sources.forEach((src, i) => {
+    month.events.forEach((event, i) => {
+      const src = event.cover.src;
       const random = rng(hash(src));
       const angle = photos.length * GOLDEN_ANGLE + between(random, -0.45, 0.45);
       const radius = CORNER * between(random, 0.55, 1.25);
       const hold = HOLD * between(random, 0.8, 1.3);
 
-      photos.push({
+      const card: RunnerPhoto = {
         key: src,
         src,
         monthId: month.id,
-        // The cover carries the month's title; a gallery photo says its own
-        // thing if it has one, and falls back to the title if it does not.
-        caption: i === 0 ? month.title : (month.gallery[i - 1].caption ?? month.title),
+        eventId: event.id,
+        // A card names the thing that happened, not the month it happened in —
+        // the month has its own title flying through ahead of it.
+        caption: event.cover.caption ?? event.title,
         monthIndex,
         photoIndex: photos.length,
-        slide: i,
-        // Jitter is under half a step, so photo depths stay strictly ascending
+        slide: 0,
+        // Jitter is under half a step, so card depths stay strictly ascending
         // for nearestPhotoIndex() while the run stops reading as a ladder.
-        depth: cursor + PHOTO_LEAD + i * PHOTO_STEP + between(random, -70, 70),
+        depth: cursor + EVENT_LEAD + i * EVENT_STEP + between(random, -70, 70),
         x: Math.cos(angle) * radius,
         y: Math.sin(angle) * radius * TALL,
         holdX: Math.cos(angle) * hold,
         holdY: Math.sin(angle) * hold * TALL,
         size: BASE_SIZE * between(random, 0.86, 1.16),
         roll: between(random, -0.05, 0.05),
-      });
+      };
+
+      photos.push(card);
+      decks.set(event.id, buildDeck(card, event));
     });
 
-    monthRanges.push({ from, to: photos.length });
     cursor = photos[photos.length - 1].depth + MONTH_GAP;
     monthSpans.push(cursor - monthDepths[monthIndex]);
   });
@@ -244,13 +288,14 @@ const monthRanges: Array<{ from: number; to: number }> = [];
 
 export const runnerPhotos: RunnerPhoto[] = photos;
 
+const NO_DECK: RunnerPhoto[] = [];
+
 /**
- * Every photograph of one month, in the order they appear in the run — the
- * cover first, then the gallery. This is the deck a tapped card opens into.
+ * Every photograph of one event, cover first. This is the deck a tapped card
+ * opens into — its own pictures, not its month's.
  */
-export function photosForMonth(monthIndex: number): RunnerPhoto[] {
-  const range = monthRanges[monthIndex];
-  return range ? photos.slice(range.from, range.to) : [];
+export function photosForEvent(eventId: string | null): RunnerPhoto[] {
+  return (eventId && decks.get(eventId)) || NO_DECK;
 }
 
 export const monthStartDepths: number[] = monthDepths;
