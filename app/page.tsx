@@ -2,11 +2,13 @@ import { MonthRunner } from "@/components/canvas/MonthRunner";
 import { AfterLens } from "@/components/layout/AfterLens";
 import { FocusMode } from "@/components/focus/FocusMode";
 import { IntroSection } from "@/components/layout/IntroSection";
+import { Loader } from "@/components/layout/Loader";
 import { MonthSection } from "@/components/layout/MonthSection";
 import { MonthTitleRunner } from "@/components/layout/MonthTitleRunner";
 import { OutroSection } from "@/components/layout/OutroSection";
 import { ProgressHeader } from "@/components/layout/ProgressHeader";
 import { ScrollDriver } from "@/components/layout/ScrollDriver";
+import { ScrollHint } from "@/components/layout/ScrollHint";
 import { ThemeShift } from "@/components/layout/ThemeShift";
 import { SideNav } from "@/components/layout/SideNav";
 import { YearHeader } from "@/components/layout/YearHeader";
@@ -20,8 +22,11 @@ export default function Home() {
       <MonthRunner />
       <MonthTitleRunner />
 
+      {/* The header carries the title across from the gate, so it is not held
+          back with the rest of the chrome — it gates itself. */}
+      <ProgressHeader />
+
       <AfterLens>
-        <ProgressHeader />
         <SideNav />
       </AfterLens>
 
@@ -46,6 +51,8 @@ export default function Home() {
       </main>
 
       <FocusMode />
+      <ScrollHint />
+      <Loader />
     </>
   );
 }

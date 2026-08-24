@@ -24,6 +24,8 @@ Two layers, working together:
    the camera — in the spirit of `2018.craftedbygc.com`. Organized
    chronologically, grouped by year.
 2. **The DOM overlay.** Sits on top of / alongside the canvas. Handles:
+   - The loading gate, which is the whole first screen and lifts away upwards
+     when the reader taps Enter. Behind it the intro is the 3D camera alone.
    - Year headers ("Year One", "Year Two") that pin/transition as their
      range of months scrolls past.
    - A side timeline nav (sticky, vertical dots for years/months) that lets
@@ -104,7 +106,7 @@ interface YearBlock {
 | 3D scene | `@react-three/fiber` + `@react-three/drei`, on top of `three` | R3F over raw three.js — declarative components, automatic scene cleanup on unmount, much easier for AI-assisted code to reason about. |
 | Scroll | `lenis` (not `@studio-freight/lenis` — renamed) | React usage via `lenis/react`. |
 | Scroll-linked animation | `gsap` + `@gsap/react` (`useGSAP` hook) + `ScrollTrigger` | All GSAP plugins, including ScrollTrigger, are free since Webflow's 2025 acquisition — no Club GreenSock membership or license key needed. |
-| DOM motion | `motion` (not `framer-motion` — renamed, same API) | Import from `motion/react`. Installed but currently unimported: the open state is entirely 3D. |
+| DOM motion | `motion` (not `framer-motion` — renamed, same API) | Import from `motion/react`. Used by the loading gate; the open card state is entirely 3D and uses none of it. |
 | Styling | Tailwind CSS | |
 | Images | Next.js `<Image />`, pre-resized source assets | See performance rules. |
 | Deployment | Vercel, no custom domain, `vercel` CLI | |

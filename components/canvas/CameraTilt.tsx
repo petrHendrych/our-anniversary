@@ -2,7 +2,8 @@
 
 import { useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
-import { startTilt, tiltCurrent, tiltTarget } from "@/lib/tilt";
+import { armTilt, startTilt, tiltCurrent, tiltTarget } from "@/lib/tilt";
+import { usePassedCamera } from "@/lib/scroll-store";
 
 /**
  * Eases the camera towards the tilt target every frame.
@@ -18,7 +19,12 @@ import { startTilt, tiltCurrent, tiltTarget } from "@/lib/tilt";
 const FOLLOW = 2.6;
 
 export function CameraTilt() {
+  const passed = usePassedCamera();
+
   useEffect(() => startTilt(), []);
+  // Nothing leans until the reader is out the other side of the camera — not
+  // `entered`, which fires while it is still out in front. See armTilt.
+  useEffect(() => armTilt(passed), [passed]);
 
   useFrame((state, delta) => {
     // Frame-rate independent easing: same settle time at 60 and 120Hz.

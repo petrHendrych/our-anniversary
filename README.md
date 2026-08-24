@@ -16,10 +16,20 @@ see `REQUIREMENTS.md` for why that shapes a few technical decisions.
 - **`lenis`** — smooth scroll
 - **`gsap`** + **`@gsap/react`** (`ScrollTrigger`) — scroll-linked animation,
   drives both the 3D scene and the DOM nav/headers
-- **`motion`** — installed for DOM transitions; currently unimported, since
-  the open state is entirely 3D
+- **`motion`** — the loading gate's transitions (the open card state is
+  entirely 3D and uses none of it)
 - **Tailwind CSS** — styling
 - Deployed on **Vercel** (no custom domain)
+
+## The loading gate
+The page opens behind a gate that counts real work — the display face, the 3D
+scene coming up, and the first few photographs baked into printed cards — then
+offers **Enter**. That tap is also what asks iOS for device-orientation access,
+so the tilt-to-look-around effect works without a second prompt — though the
+tilt itself stays asleep until the reader is through the camera's lens, so the
+intro is never shown at an angle just because the pointer is in a corner. If an asset
+never arrives the gate opens anyway after nine seconds; see
+`lib/preload-store.ts`.
 
 ## Getting started
 ```bash

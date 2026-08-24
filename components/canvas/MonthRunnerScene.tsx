@@ -13,6 +13,7 @@ import {
   useEntered,
   useNearestPhotoIndex,
 } from "@/lib/scroll-store";
+import { markSceneReady } from "@/lib/preload-store";
 import { openingPalette, paletteFor } from "@/lib/palette";
 import { CAMERA_Z, FOG_FAR, FOG_NEAR, runnerPhotos } from "@/lib/runner-layout";
 
@@ -81,6 +82,9 @@ export function MonthRunnerScene() {
         // 2x is plenty on a phone; 3x triples fill cost for nothing visible.
         dpr={[1, 2]}
         gl={{ antialias: true, alpha: true }}
+        // The loading gate waits on this: no point opening the page before the
+        // scene it is hiding actually exists.
+        onCreated={markSceneReady}
       >
         {/* Photos surface out of the page colour instead of popping in. */}
         <MonthFog />

@@ -70,7 +70,27 @@ devices," not broad compatibility.
    real WebGL memory ceiling independent of chip speed. Never mount textures
    for all months at once. Maintain a sliding window (current ± a few
    months) and dispose textures for anything scrolled far out of range.
-8. Keep the codebase small and legible over clever. This is a personal
+8. **The loading gate counts real work, and it is the page's one guaranteed
+   tap.** `lib/preload-store.ts` tracks a fixed list — the display face, the
+   scene's first frame, and the first few photographs baked into cards — so the
+   counter never lies, and it opens anyway after `PATIENCE` if something never
+   arrives. The Enter button is where `requestGyro()` is called from: iOS only
+   hands out device orientation from inside a gesture, and this is the one
+   gesture every reader makes. It lifts away upwards rather than dissolving,
+   and what is behind it is the camera alone — `IntroSection` is pure scroll
+   height now, because repeating the title over the camera would be reading
+   the reader the same page twice — except the header, which carries the title
+   across so it does not vanish and reappear on the far side.
+9. **Tilt only wakes up past the lens.** `armTilt()` in `lib/tilt.ts` pins the
+   camera dead centre until `scrollState.entered`. The reader arrives from the
+   gate with their pointer wherever Enter happened to be — usually a corner —
+   and a camera leaning towards it would show them the intro at an angle for
+   no reason they could name. It arms on `scrollState.passed` — level with the
+   camera and past it — not on `entered`, which fires 1400 units earlier while
+   the camera is still out in front. `entered` is the gate for month content;
+   `passed` is the only honest answer to "have they gone through it yet", and
+   the scroll hint uses it too.
+10. Keep the codebase small and legible over clever. This is a personal
    project maintained by one frontend dev using an AI pair — prefer
    straightforward React/R3F components over abstraction layers.
 
@@ -124,6 +144,8 @@ components/
     IntroCamera.tsx
     CameraTilt.tsx
   layout/                   # year headers, side nav, progress header, titles
+    Loader.tsx              # the gate: real progress, Enter, then lifts away
+    ScrollHint.tsx          # the page's one instruction, and only briefly
   focus/
     FocusMode.tsx           # draws nothing; stops Lenis and the tilt
 data/
@@ -135,6 +157,7 @@ lib/
   deck-layout.ts            # the ring: where each card sits behind the front one
   runner-layout.ts          # all 3D placement maths
   card-texture.ts           # bakes the printed frame; sliding-window cache
+  preload-store.ts          # what must be ready before the gate opens
   tilt.ts, timeline.ts, palette.ts
 ```
 

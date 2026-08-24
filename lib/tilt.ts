@@ -38,6 +38,16 @@ let baseline: { beta: number; gamma: number } | null = null;
 let listening = false;
 /** True while a card is open: the camera holds still so the card lands centred. */
 let suspended = false;
+/**
+ * False until the reader is through the lens.
+ *
+ * The intro is a single object viewed head on, and the reader arrives here with
+ * their pointer wherever the Enter button happened to be — usually a corner. A
+ * camera that leaned towards it would show the reader a lens they are looking
+ * at from an angle, for no reason they could name. So the tilt only wakes up on
+ * the other side, where panning becomes navigation rather than decoration.
+ */
+let armed = false;
 
 type OrientationPermission = "granted" | "denied" | "default";
 interface OrientationCtor {
@@ -59,7 +69,7 @@ function notify() {
 }
 
 function handlePointer(event: PointerEvent) {
-  if (suspended) return;
+  if (suspended || !armed) return;
   // Touch drags are scrolling; only a real pointer aims the camera.
   if (event.pointerType !== "mouse") return;
   tiltTarget.y = -(event.clientX / window.innerWidth - 0.5) * MOUSE_RANGE;
@@ -67,7 +77,7 @@ function handlePointer(event: PointerEvent) {
 }
 
 function handleOrientation(event: DeviceOrientationEvent) {
-  if (suspended) return;
+  if (suspended || !armed) return;
   const beta = event.beta ?? 0;
   const gamma = event.gamma ?? 0;
   // First reading is however the phone happened to be held; that is level.
@@ -109,6 +119,24 @@ export async function requestGyro(): Promise<boolean> {
   if (listening) window.addEventListener("deviceorientation", handleOrientation);
   notify();
   return true;
+}
+
+/**
+ * Wakes the tilt up, or puts it back to sleep pointing straight ahead.
+ *
+ * Called with the reader's progress through the lens: before that the camera is
+ * pinned dead centre whatever the pointer is doing, and the moment it wakes it
+ * re-levels, so however the phone is being held at that instant becomes level.
+ */
+export function armTilt(on: boolean): void {
+  if (armed === on) return;
+  armed = on;
+  if (on) {
+    levelTilt();
+  } else {
+    tiltTarget.x = 0;
+    tiltTarget.y = 0;
+  }
 }
 
 /** Re-levels the tilt to however the phone is being held right now. */

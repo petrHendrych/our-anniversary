@@ -5,6 +5,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { setScrollState } from "@/lib/scroll-store";
 import {
+  CAMERA_PASS_DEPTH,
   LENS_DEPTH,
   monthStartDepths,
   nearestPhotoIndex,
@@ -96,25 +97,10 @@ export function ScrollDriver() {
           activeIndex: gsap.utils.clamp(0, monthCount - 1, activeIndex),
           photoIndex: nearestPhotoIndex(gsap.utils.clamp(0, runnerDepth, depth)),
           entered: depth >= LENS_DEPTH,
+          passed: depth >= CAMERA_PASS_DEPTH,
         });
       },
     });
-
-    // The title hands over to the camera: it is gone well before the lens
-    // arrives, so the reader flies through an empty frame, not through text.
-    const introCopy = document.querySelector<HTMLElement>("[data-intro-copy]");
-    if (introCopy) {
-      gsap.to(introCopy, {
-        autoAlpha: 0,
-        ease: "none",
-        scrollTrigger: {
-          trigger: introCopy.parentElement,
-          start: "top top",
-          end: "45% top",
-          scrub: true,
-        },
-      });
-    }
 
     // Decorative motion only — skipped wholesale when reduced motion is on.
     const mm = gsap.matchMedia();

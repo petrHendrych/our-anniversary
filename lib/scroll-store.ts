@@ -31,6 +31,13 @@ export interface ScrollSnapshot {
    */
   entered: boolean;
   /**
+   * False until the reader is level with the intro camera and past it. Later
+   * than `entered`, which fires while the camera is still out in front: this is
+   * the moment the approach is actually over, and the only honest answer to
+   * "have they gone through it yet".
+   */
+  passed: boolean;
+  /**
    * Index into `runnerPhotos` of the photo nearest the camera. Changes a few
    * dozen times across the whole page, so unlike `depth` it is safe to
    * re-render on — the scene mounts its texture window around it.
@@ -44,6 +51,7 @@ const state: ScrollSnapshot = {
   depth: 0,
   photoIndex: 0,
   entered: false,
+  passed: false,
 };
 const listeners = new Set<() => void>();
 
@@ -73,6 +81,10 @@ export function setScrollState(next: Partial<ScrollSnapshot>): void {
     state.entered = next.entered;
     changed = true;
   }
+  if (next.passed !== undefined && next.passed !== state.passed) {
+    state.passed = next.passed;
+    changed = true;
+  }
   // `depth` moves every frame and is only ever read from render loops, so it
   // updates silently — notifying listeners for it would defeat the point.
   if (next.depth !== undefined) state.depth = next.depth;
@@ -98,6 +110,15 @@ export function useEntered(): boolean {
   return useSyncExternalStore(
     subscribeScroll,
     () => state.entered,
+    () => false,
+  );
+}
+
+/** Re-renders once, when the reader is past the intro camera. */
+export function usePassedCamera(): boolean {
+  return useSyncExternalStore(
+    subscribeScroll,
+    () => state.passed,
     () => false,
   );
 }

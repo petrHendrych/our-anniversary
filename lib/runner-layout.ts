@@ -38,8 +38,14 @@ const MONTH_GAP = 1250;
  * does the first month begin. These are all depths along the same axis as the
  * photographs, so the whole page is one flight.
  */
-/** Depth the camera body sits at. */
-export const INTRO_CAMERA_DEPTH = 2600;
+/**
+ * Depth the camera body sits at.
+ *
+ * Near enough that it is already out of the fog when the gate lifts — at 2600
+ * it sat beyond FOG_FAR, so the reader met an empty coloured screen and had to
+ * scroll on faith before anything appeared.
+ */
+export const INTRO_CAMERA_DEPTH = 1700;
 /** Depth at which the reader is level with the camera — the moment of passing. */
 export const CAMERA_PASS_DEPTH = INTRO_CAMERA_DEPTH + CAMERA_Z;
 /**
