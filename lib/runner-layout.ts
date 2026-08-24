@@ -64,13 +64,32 @@ export function gateOpacity(depth: number): number {
 }
 
 /**
- * How far off centre a photo sits. This is deliberately wider than the screen:
- * a photo arrives near the middle of the frame while it is still far off, then
- * sweeps outward as it approaches, and by the time it is large it is out at the
- * edge or past it. Seeing all of a month means panning around — mouse on a
- * desktop, tilting the phone otherwise.
+ * How far off centre a photo sits.
+ *
+ * Placement has two parts, and they behave differently as a photo approaches.
+ *
+ * `hold` is measured on the screen and stays there: its world offset grows in
+ * step with distance, so the photo keeps the same apparent distance from the
+ * middle of the frame however far away it is. That is what keeps the centre of
+ * the screen clear — nothing ever emerges from it or flies through it.
+ *
+ * `sweep` is a plain world offset, so it counts for almost nothing while the
+ * photo is distant and more and more as it nears. That is the outward drift,
+ * and it is deliberately wider than the screen: by the time a photo is large
+ * it is out at the edge or past it. Seeing all of a month means panning around
+ * — mouse on a desktop, tilting the phone otherwise.
  */
 const CORNER = 640;
+/**
+ * The clearance the middle of the frame always keeps, in CSS pixels.
+ *
+ * Small on purpose. Dropping the photos that used to come straight down the
+ * middle already empties the centre; this is what makes the clearance
+ * structural rather than a side effect of how far away photos stop being
+ * drawn. Raising it pushes the whole composition towards the edges of a phone
+ * screen, where less of each month can be seen at once.
+ */
+const HOLD = 45;
 /**
  * Longest edge of a card, before the narrow-screen scale. A card is a print,
  * so this covers the paper and its border as well as the photograph — it is
@@ -113,9 +132,12 @@ export interface RunnerPhoto {
   slide: number;
   /** Distance from the start of the run. Grows as the reader scrolls. */
   depth: number;
-  /** Centre offset in world units, before planeScale(). */
+  /** Outward drift, in world units, before spreadScale(). */
   x: number;
   y: number;
+  /** Clearance held from the middle of the frame, in CSS pixels at any depth. */
+  holdX: number;
+  holdY: number;
   /** Longest edge in world units, before planeScale(). */
   size: number;
   roll: number;
@@ -128,8 +150,6 @@ export interface RunnerPhoto {
  * it reads as scattered rather than as a pattern.
  */
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
-/** How often a photo ignores the spread and passes straight through the middle. */
-const CENTRE_CHANCE = 0.16;
 /** Screens are taller than they are wide, so the scatter is an ellipse. */
 const TALL = 1.3;
 
@@ -185,13 +205,8 @@ const monthRanges: Array<{ from: number; to: number }> = [];
     sources.forEach((src, i) => {
       const random = rng(hash(src));
       const angle = photos.length * GOLDEN_ANGLE + between(random, -0.45, 0.45);
-      // Most photos sweep out past the edges of the screen; every so often one
-      // comes straight down the middle instead, so the reader is not always
-      // looking away from centre.
-      const radius =
-        random() < CENTRE_CHANCE
-          ? CORNER * between(random, 0, 0.2)
-          : CORNER * between(random, 0.6, 1.35);
+      const radius = CORNER * between(random, 0.55, 1.25);
+      const hold = HOLD * between(random, 0.8, 1.3);
 
       photos.push({
         key: src,
@@ -208,6 +223,8 @@ const monthRanges: Array<{ from: number; to: number }> = [];
         depth: cursor + PHOTO_LEAD + i * PHOTO_STEP + between(random, -70, 70),
         x: Math.cos(angle) * radius,
         y: Math.sin(angle) * radius * TALL,
+        holdX: Math.cos(angle) * hold,
+        holdY: Math.sin(angle) * hold * TALL,
         size: BASE_SIZE * between(random, 0.86, 1.16),
         roll: between(random, -0.05, 0.05),
       });
@@ -248,6 +265,35 @@ export const UNITS_PER_SCREEN = 1500;
 /** How many screens of scrolling a stretch of depth is worth. */
 export function screensFor(depth: number): number {
   return depth / UNITS_PER_SCREEN;
+}
+
+/**
+ * How much of a photo's held offset applies at this point in its flight.
+ *
+ * One at the Z=0 plane, larger the further away the photo is, shrinking towards
+ * zero as it reaches the camera — exactly the reciprocal of the perspective
+ * division, so `holdX * holdScale(runZ)` always lands on the same number of
+ * screen pixels. MonthCard and MonthDeck both place a card with
+ * `(photo.holdX * holdScale(runZ) + photo.x) * spread`; they have to agree, or
+ * opening a card would jump.
+ */
+export function holdScale(runZ: number): number {
+  return (CAMERA_Z - runZ) / CAMERA_Z;
+}
+
+/** Distance from the camera at which a photo has gone entirely. */
+export const PASS_NEAR = 65;
+/** Where it begins to go — the last moment before the reader passes through it. */
+export const PASS_FAR = 150;
+
+/**
+ * Photos hold full strength all the way in and only fade as they cross the
+ * camera, the same way the flying month titles do (see MonthTitleRunner). The
+ * reader flies through a photograph rather than watching it wink out while it
+ * is still mid-screen.
+ */
+export function passOpacity(distance: number): number {
+  return Math.max(0, Math.min(1, (distance - PASS_NEAR) / (PASS_FAR - PASS_NEAR)));
 }
 
 /** Ascending photo depths — the lookup table behind nearestPhotoIndex(). */

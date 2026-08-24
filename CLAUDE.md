@@ -26,21 +26,31 @@ devices," not broad compatibility.
    (`lib/card-texture.ts`). That is deliberately not "text in 3D": one quad,
    one texture, and the caption travels with the card for free. Don't replace
    it with projected DOM labels or a text-in-GL pipeline.
-2. **One scroll source of truth.** `lenis` drives real page scroll.
+2. **A photo holds its place on screen, then sweeps out of it.** Placement is
+   two parts (`lib/runner-layout.ts`): `holdX/holdY` are screen pixels whose
+   world offset grows with distance, so a photo keeps a fixed clearance from
+   the middle of the frame at every depth and the centre of the screen is
+   never flown through; `x/y` are plain world offsets that count for little far
+   away and more as the photo arrives, which is the outward drift. Both
+   MonthCard and MonthDeck place a card with
+   `(photo.holdX * holdScale(runZ) + photo.x) * spread` — they must agree or
+   opening a card jumps. Photos are drawn the whole way in and fade only as
+   they cross the camera, like the flying month titles.
+3. **One scroll source of truth.** `lenis` drives real page scroll.
    `gsap` `ScrollTrigger` reads scroll position/progress from Lenis and is
    the single thing that updates: 3D card transforms, year header
    pin/transition state, and the active dot in the side nav. Don't invent a
    second scroll system inside the canvas (e.g. drei's `<ScrollControls>`)
    — it will fight with Lenis.
-3. **A tapped card is placed in camera space, not world space.** It flies to
+4. **A tapped card is placed in camera space, not world space.** It flies to
    `FOCUS_DISTANCE` straight down the camera's own axis with its rotation
    slerped to the camera's, so it lands centred and face-on no matter where
    the tilt has left the camera looking — the tilt just freezes, it never has
-   to swing back to level. `FOCUS_DISTANCE`, plus the depth the pile reaches
-   back, must stay nearer than the nearest card still being drawn
-   (`CAMERA_Z - PASSED`), which is what puts the deck in front of everything
-   without touching the depth buffer. See `lib/focus-layout.ts`.
-4. **The tapped card flies itself; the deck takes over when it lands.**
+   to swing back to level. What keeps the deck in front of the run is draw
+   order, not distance: nothing writes depth anywhere in this scene, so deck
+   cards simply take a higher `renderOrder` and turn `depthTest` off. See
+   `lib/focus-layout.ts`.
+5. **The tapped card flies itself; the deck takes over when it lands.**
    `MonthCard` owns the zoom, start to finish — that path is deliberately
    untouched. `MonthDeck` mounts as soon as the month opens so its textures
    are ready, but draws nothing until `focusState.handed`, at which point its
@@ -49,18 +59,18 @@ devices," not broad compatibility.
    card is a different photograph and half a month is not mounted in the run.
    The two poses agree by algebra, not by luck: the deck's front-card path is
    `lerp(target, rest, 1 - t)` where MonthCard's is `lerp(rest, target, t)`.
-5. **The deck is one float.** `focusState.cursor` is a continuous, *unwrapped*
+6. **The deck is one float.** `focusState.cursor` is a continuous, *unwrapped*
    position around the month's ring of photographs; every card derives its
    whole pose from `ringOffset()` and `pilePose()` (`lib/deck-layout.ts`).
    Cycling loops for ever, and the seam where the ring index jumps is
    invisible only because both ends of the range describe the same pose — far
    back, centred, transparent. The curves are shaped to land there. Changing
    one without the other makes the deck blink once per lap.
-6. **Texture budget matters even on flagship phones.** Mobile Safari has a
+7. **Texture budget matters even on flagship phones.** Mobile Safari has a
    real WebGL memory ceiling independent of chip speed. Never mount textures
    for all months at once. Maintain a sliding window (current ± a few
    months) and dispose textures for anything scrolled far out of range.
-7. Keep the codebase small and legible over clever. This is a personal
+8. Keep the codebase small and legible over clever. This is a personal
    project maintained by one frontend dev using an AI pair — prefer
    straightforward React/R3F components over abstraction layers.
 

@@ -16,6 +16,7 @@ import { deckSeed, pilePose, ringOffset } from "@/lib/deck-layout";
 import {
   CAMERA_Z,
   gateOpacity,
+  holdScale,
   photosForMonth,
   planeScale,
   spreadScale,
@@ -253,9 +254,16 @@ function DeckCard({
     const front = Math.max(0, 1 - Math.abs(offset));
     const home = (1 - t) * front;
 
-    // Where this photograph sits in the run. Scroll is stopped while the deck
-    // is open, so this is frozen.
-    rest.set(photo.x * spread, photo.y * spread, scrollState.depth - photo.depth);
+    // Where this photograph sits in the run — the same expression MonthCard
+    // uses, so the two agree to the pixel at the moments they hand over.
+    // Scroll is stopped while the deck is open, so this is frozen.
+    const runZ = scrollState.depth - photo.depth;
+    const k = holdScale(runZ);
+    rest.set(
+      (photo.holdX * k + photo.x) * spread,
+      (photo.holdY * k + photo.y) * spread,
+      runZ,
+    );
 
     // Camera space, so the deck is square to the reader however the tilt has
     // left the camera looking. See lib/focus-layout.

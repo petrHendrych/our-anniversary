@@ -7,15 +7,17 @@ import { scrollState } from "@/lib/scroll-store";
 import { focusCard, focusState } from "@/lib/focus-store";
 import { FOCUS_DISTANCE, focusPose } from "@/lib/focus-layout";
 import {
+  CAMERA_Z,
   gateOpacity,
+  holdScale,
+  passOpacity,
+  PASS_NEAR,
   planeScale,
   spreadScale,
   type RunnerPhoto,
 } from "@/lib/runner-layout";
 import { acquireCardTexture, releaseCardTexture } from "@/lib/card-texture";
 
-/** A photo this far past the camera plane is behind the reader — stop drawing it. */
-const PASSED = 240;
 /** Only a photo this near the camera plane answers a tap. */
 const TAP_RANGE = 700;
 /** How far the rest of the run dims and falls back while a deck is open. */
@@ -37,7 +39,8 @@ const restQ = new THREE.Quaternion();
  * The card reads `scrollState.depth` straight out of the store inside
  * useFrame — no React state, no re-renders while scrolling. Its Z is simply
  * `depth - photo.depth`: negative while the photo is still ahead in the haze,
- * zero as it passes the camera plane, positive once it is behind the reader.
+ * zero as it passes the Z=0 plane, and on up to CAMERA_Z as it reaches the
+ * reader. It is drawn the whole way, fading only as it crosses the camera.
  * Position, rotation and scale are all written per frame rather than passed as
  * props, so a React re-render can never fight the loop.
  *
@@ -86,7 +89,8 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
     if (!node || !surface) return;
 
     const runZ = scrollState.depth - photo.depth;
-    const gate = gateOpacity(scrollState.depth);
+    const distance = CAMERA_Z - runZ;
+    const gate = gateOpacity(scrollState.depth) * passOpacity(distance);
     const w = width * scale;
     const h = height * scale;
     // This card flies only until the deck takes over; from then on the deck
@@ -94,7 +98,15 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
     const t =
       focusState.key === photo.key && !focusState.handed ? focusState.t : 0;
 
-    rest.set(photo.x * spread, photo.y * spread, runZ);
+    // The held part of the offset grows with distance so that it holds a fixed
+    // place on screen; the rest is a plain world offset that sweeps outward as
+    // the photo arrives. See lib/runner-layout.
+    const k = holdScale(runZ);
+    rest.set(
+      (photo.holdX * k + photo.x) * spread,
+      (photo.holdY * k + photo.y) * spread,
+      runZ,
+    );
 
     if (t === 0) {
       // Whatever is open takes the run's attention with it: the rest of the
@@ -106,7 +118,9 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
       node.rotation.z = photo.roll;
       node.scale.set(w, h, 1);
       node.visible =
-        runZ < PASSED &&
+        // Drawn all the way in: a photo is only gone once it has crossed the
+        // camera, not while it is still large and mid-screen.
+        distance > PASS_NEAR &&
         // Once handed over, the deck holds this month's copies.
         !(focusState.handed && focusState.monthId === photo.monthId);
       if (node.renderOrder !== 0) {

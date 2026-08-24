@@ -9,11 +9,13 @@ import { CAMERA_Z } from "@/lib/runner-layout";
  * simply freeze when a card opens instead of having to swing back to level
  * before the flight arrives.
  *
- * FOCUS_DISTANCE is deliberately nearer than any card still being drawn:
- * MonthCard culls at `z >= PASSED (240)`, i.e. at distances greater than
- * `CAMERA_Z - 240 = 560`. Raising PASSED means lowering this. The pile behind
- * the front card reaches back a further `visibleDepth * DECK_STEP` (see
- * lib/deck-layout), and all of it has to stay in front of the camera.
+ * The run is drawn all the way in now — a photo is only gone once it has
+ * crossed the camera — so a run card can be nearer than FOCUS_DISTANCE. What
+ * keeps the deck in front is draw order, not distance: nothing writes depth
+ * (`depthWrite` is off everywhere), deck cards take `renderOrder` 60-100 and
+ * turn `depthTest` off, and the run sits at 0. The pile reaches back a further
+ * `visibleDepth * DECK_STEP` (see lib/deck-layout), which only has to stay in
+ * front of the camera.
  *
  * The scene is built so one world unit is one CSS pixel at the Z=0 plane, so a
  * world size S at distance D covers `S * CAMERA_Z / D` pixels. Everything below
