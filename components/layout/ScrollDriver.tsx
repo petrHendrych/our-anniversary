@@ -27,8 +27,21 @@ gsap.registerPlugin(ScrollTrigger, useGSAP);
  * whether a month has four photos or seven.
  *
  * Everything scroll-linked hangs off this: the header bar, the active tick in
- * the spine, the flying month titles, and the 3D photos — which read `depth` from the
- * store rather than measuring scroll for themselves.
+ * the spine, the flying month titles, and the 3D photos — which read `depth`
+ * from the store rather than measuring scroll for themselves.
+ *
+ * The reading is taken on the gsap ticker rather than from inside a
+ * ScrollTrigger's own onUpdate. Lenis is still the only thing that moves the
+ * page and ScrollTrigger still owns everything else on it — this is the same
+ * scroll, read one step later. The reason is that a ScrollTrigger only calls
+ * onUpdate while the scroll is between its start and end, and those two are
+ * measured off an element's box; get that measurement wrong by any means and
+ * the callback simply stops being called, which does not look like a broken
+ * measurement, it looks like the entire run failing to exist. A phone found
+ * one of those ways and a desktop did not: the page scrolled, the sticky month
+ * copy went with it because that is pure CSS, and the reader sat looking at
+ * the intro camera for the length of two years. Scroll position is one number
+ * and reading it needs no range to be inside of.
  */
 export function ScrollDriver() {
   useGSAP(() => {
@@ -42,16 +55,27 @@ export function ScrollDriver() {
     let anchors: number[] = [];
     let depths: number[] = [0, ...monthStartDepths];
 
+    /** Scroll at the very bottom of the page — the denominator for progress. */
+    let maxScroll = 1;
+
     const measure = () => {
       anchors = [
         0,
         ...sections.map((el) => el.getBoundingClientRect().top + window.scrollY),
       ];
       depths = [0, ...monthStartDepths];
+      maxScroll = Math.max(
+        1,
+        document.documentElement.scrollHeight - window.innerHeight,
+      );
     };
 
     /** Piecewise-linear scroll -> depth, extrapolated past both ends. */
     const depthAt = (scroll: number): number => {
+      // If measure() has somehow not run, every reader gets the same symptom:
+      // the page scrolls and the run sits at depth zero with the intro camera
+      // parked in front of them. One layout read, once, is cheap insurance.
+      if (anchors.length === 0) measure();
       if (anchors.length === 0) return 0;
       if (anchors.length === 1) return scroll - anchors[0];
 
@@ -71,36 +95,39 @@ export function ScrollDriver() {
       }
 
       const last = anchors.length - 1;
-      const rate =
-        (depths[last] - depths[last - 1]) / (anchors[last] - anchors[last - 1]);
+      // Two sections measured to the same offset would make this Infinity, and
+      // a NaN depth hides the whole run rather than just misplacing it.
+      const span = anchors[last] - anchors[last - 1];
+      if (span <= 0) return depths[last];
+      const rate = (depths[last] - depths[last - 1]) / span;
       return depths[last] + (scroll - anchors[last]) * rate;
     };
 
-    ScrollTrigger.create({
-      trigger: document.documentElement,
-      start: "top top",
-      end: "bottom bottom",
-      onRefresh: measure,
-      onUpdate: (self) => {
-        const scroll = self.scroll();
-        const depth = depthAt(scroll);
-        // The month whose section the reader is actually in — the copy, the
-        // spine and the header all follow the DOM, not the depth.
-        let activeIndex = 0;
-        for (let i = 0; i < sections.length; i++) {
-          if (scroll >= anchors[i + 1] - window.innerHeight * 0.5) activeIndex = i;
-        }
+    const read = () => {
+      const scroll = window.scrollY;
+      const depth = depthAt(scroll);
+      // The month whose section the reader is actually in — the copy, the
+      // spine and the header all follow the DOM, not the depth.
+      let activeIndex = 0;
+      for (let i = 0; i < sections.length; i++) {
+        if (scroll >= anchors[i + 1] - window.innerHeight * 0.5) activeIndex = i;
+      }
 
-        setScrollState({
-          progress: self.progress,
-          depth,
-          activeIndex: gsap.utils.clamp(0, monthCount - 1, activeIndex),
-          photoIndex: nearestPhotoIndex(gsap.utils.clamp(0, runnerDepth, depth)),
-          entered: depth >= LENS_DEPTH,
-          passed: depth >= CAMERA_PASS_DEPTH,
-        });
-      },
-    });
+      setScrollState({
+        progress: gsap.utils.clamp(0, 1, scroll / maxScroll),
+        depth,
+        activeIndex: gsap.utils.clamp(0, monthCount - 1, activeIndex),
+        photoIndex: nearestPhotoIndex(gsap.utils.clamp(0, runnerDepth, depth)),
+        entered: depth >= LENS_DEPTH,
+        passed: depth >= CAMERA_PASS_DEPTH,
+      });
+    };
+
+    measure();
+    read();
+    gsap.ticker.add(read);
+    // Anything that re-measures the page has moved the anchors with it.
+    ScrollTrigger.addEventListener("refresh", measure);
 
     // A month's copy is sticky for the whole section and then lets go for the
     // last screenful, riding up through the next month's title. Taking it down
@@ -142,6 +169,17 @@ export function ScrollDriver() {
 
     // Web fonts land after first paint and shift every trigger's measurements.
     document.fonts?.ready.then(() => ScrollTrigger.refresh());
+    // So does a rotation — and with ignoreMobileResize on, a plain resize no
+    // longer refreshes, so the one resize that genuinely changes the layout
+    // has to say so itself.
+    const onOrient = () => ScrollTrigger.refresh();
+    window.addEventListener("orientationchange", onOrient);
+
+    return () => {
+      gsap.ticker.remove(read);
+      ScrollTrigger.removeEventListener("refresh", measure);
+      window.removeEventListener("orientationchange", onOrient);
+    };
   });
 
   return null;

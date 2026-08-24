@@ -10,11 +10,28 @@ import { useGSAP } from "@gsap/react";
 
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 
+// A phone fires `resize` every time the URL bar slides in or out. Sections are
+// sized in svh, which deliberately does not change with it, so those resizes
+// have nothing to say — and letting them refresh every trigger mid-scroll
+// re-measures the whole page while the reader is moving through it.
+ScrollTrigger.config({ ignoreMobileResize: true });
+
 /**
  * Hands scroll timing to a single loop: GSAP's ticker drives Lenis, Lenis
- * drives real page scroll, and every Lenis scroll event refreshes
- * ScrollTrigger. Two rAF loops racing each other is exactly the drift bug
- * REQUIREMENTS.md warns about, so `autoRaf` is off and gsap.ticker owns it.
+ * drives real page scroll, and ScrollTrigger is read off the result. Two rAF
+ * loops racing each other is exactly the drift bug REQUIREMENTS.md warns
+ * about, so `autoRaf` is off and gsap.ticker owns it.
+ *
+ * ScrollTrigger is updated from the ticker rather than from Lenis's `scroll`
+ * event, which is the arrangement most write-ups suggest. The difference only
+ * shows on a phone: `scroll` fires when *Lenis* moves the page, and there are
+ * ways for a touch device to scroll without Lenis having done it — Lenis is
+ * stopped, a gesture it declined to take, an in-app browser handling the drag
+ * itself. When that happens the page moves, the sticky month copy moves with
+ * it because that is pure CSS, and nothing scroll-linked moves at all: the run
+ * freezes with the intro camera still sitting in front of the reader. Reading
+ * the scroll position every frame cannot get into that state, and costs one
+ * cheap call per frame.
  */
 function LenisGsapBridge() {
   const lenis = useLenis();
@@ -22,18 +39,18 @@ function LenisGsapBridge() {
   useEffect(() => {
     if (!lenis) return;
 
-    const update = () => ScrollTrigger.update();
-    const raf = (time: number) => lenis.raf(time * 1000); // gsap ticker is in seconds
+    const frame = (time: number) => {
+      lenis.raf(time * 1000); // gsap ticker is in seconds
+      ScrollTrigger.update();
+    };
 
-    lenis.on("scroll", update);
-    gsap.ticker.add(raf);
+    gsap.ticker.add(frame);
     // Lag smoothing skips frames to "catch up" after a stall; with scroll-linked
     // 3D that reads as a jump, so it stays off.
     gsap.ticker.lagSmoothing(0);
 
     return () => {
-      lenis.off("scroll", update);
-      gsap.ticker.remove(raf);
+      gsap.ticker.remove(frame);
       gsap.ticker.lagSmoothing(500, 33);
     };
   }, [lenis]);

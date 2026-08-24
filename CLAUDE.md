@@ -42,12 +42,24 @@ devices," not broad compatibility.
    (it used to be floored at 1), so the outermost card of a month is still
    reachable there instead of sitting two screen widths off centre. Photos are drawn the whole way in and fade only as
    they cross the camera, like the flying month titles.
-3. **One scroll source of truth.** `lenis` drives real page scroll.
-   `gsap` `ScrollTrigger` reads scroll position/progress from Lenis and is
-   the single thing that updates: 3D card transforms, year header
-   pin/transition state, and the active dot in the side nav. Don't invent a
-   second scroll system inside the canvas (e.g. drei's `<ScrollControls>`)
-   — it will fight with Lenis.
+3. **One scroll source of truth.** `lenis` drives real page scroll, and
+   `gsap.ticker` drives Lenis. `ScrollDriver` reads that one scroll position
+   once per frame off the same ticker and publishes it to `scroll-store`;
+   everything scroll-linked — 3D card transforms, the flying titles, the
+   header, the active tick — reads the store. Don't invent a second scroll
+   system inside the canvas (e.g. drei's `<ScrollControls>`) — it will fight
+   with Lenis.
+
+   The reading is deliberately *not* taken inside a `ScrollTrigger`'s
+   `onUpdate`. A ScrollTrigger only calls back while the scroll sits between
+   its start and end, and both are measured off an element's box; anything
+   that gets that measurement wrong stops the callback entirely, and the
+   symptom is not a misplaced run, it is no run at all — the page scrolls, the
+   sticky month copy goes with it because that is pure CSS, and the reader
+   looks at the intro camera for the length of two years. A phone found one of
+   those ways and a desktop did not. ScrollTrigger is still used for what it
+   is good at: the scrubbed copy fades, and `refresh` as the signal to
+   re-measure the section anchors.
 4. **A tapped card is placed in camera space, not world space.** It flies to
    `FOCUS_DISTANCE` straight down the camera's own axis with its rotation
    slerped to the camera's, so it lands centred and face-on no matter where
