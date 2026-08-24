@@ -91,9 +91,9 @@ const DEFAULT_EVENT_PHOTOS = 4;
  * Everything else in the two years is generated below as a placeholder, so the
  * timeline is continuous from the first month to the last — an unwritten month
  * is a month waiting to be written, not a month missing from the story. An
- * unwritten month gets a single blank event, so it is one card in the run;
- * a written month gets one card per event it names. Replace an entry here as
- * each one gets its photos and its text.
+ * unwritten month gets three or four blank events, so it carries a month's
+ * worth of cards; a written month gets one card per event it names. Replace an
+ * entry here as each one gets its photos and its text.
  */
 const written: Record<string, WrittenMonth> = {
   "2024-09": {
@@ -194,9 +194,25 @@ const written: Record<string, WrittenMonth> = {
   },
 };
 
-/** The single blank event an unwritten month stands on. */
-function blankEvent(monthLabel: string, year: number, i: number): WrittenEvent {
-  return { slug: "01", title: `${monthLabel} ${year}`, photos: 3 + (i % 3) };
+/**
+ * The events an unwritten month stands on.
+ *
+ * A month is never one card: even before its text is written it holds three or
+ * four, so the run has the density it will have when the real months land and
+ * the spacing in lib/runner-layout is tuned against something honest. Their
+ * decks are deliberately thin — BLANK_EVENT_PHOTOS, not DEFAULT_EVENT_PHOTOS —
+ * because every placeholder behind a cover is an image generated, shipped and
+ * baked for a card nobody will open twice.
+ */
+const BLANK_EVENT_PHOTOS = 2;
+
+function blankEvents(monthLabel: string, year: number, i: number): WrittenEvent[] {
+  const count = 3 + (i % 2);
+  return Array.from({ length: count }, (_, n) => ({
+    slug: String(n + 1).padStart(2, "0"),
+    title: `${monthLabel} ${year} · ${n + 1}`,
+    photos: BLANK_EVENT_PHOTOS,
+  }));
 }
 
 function buildEvent(monthId: string, entry: WrittenEvent): MemoryEvent {
@@ -234,7 +250,7 @@ function buildMonth(i: number): Month {
   const monthLabel = MONTH_NAMES[monthIndex - 1];
   const id = `${year}-${String(monthIndex).padStart(2, "0")}`;
   const entry = written[id];
-  const events = entry?.events ?? [blankEvent(monthLabel, year, i)];
+  const events = entry?.events ?? blankEvents(monthLabel, year, i);
 
   return {
     id,

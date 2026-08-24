@@ -3,17 +3,18 @@
 import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { scrollState } from "@/lib/scroll-store";
-import { CAMERA_Z, gateOpacity, monthStartDepths } from "@/lib/runner-layout";
+import {
+  CAMERA_Z,
+  gateOpacity,
+  monthStartDepths,
+  TITLE_APPEAR_FAR,
+  TITLE_APPEAR_NEAR,
+  TITLE_PASS_FAR,
+  TITLE_PASS_NEAR,
+} from "@/lib/runner-layout";
+import { paletteFor } from "@/lib/palette";
 import { tiltCurrent } from "@/lib/tilt";
 import { months, years } from "@/lib/timeline";
-
-/** Distances from the camera, in the same world units as the runner. */
-const APPEAR_FAR = 4200;
-const APPEAR_NEAR = 3000;
-/** Only the last moment fades, and only enough to hide the cut — the reader
-    flies through the letters rather than watching them dissolve. */
-const PASS_FAR = 150;
-const PASS_NEAR = 65;
 
 /**
  * The month's name, flying through the scene ahead of its photographs.
@@ -24,7 +25,19 @@ const PASS_NEAR = 65;
  * photo at the same depth would. Each title crosses the camera at its month's
  * start depth: it holds full strength all the way in, grows past the edges of
  * the screen, and the reader passes straight through the letters. It is gone
- * before the first photo arrives (PHOTO_LEAD).
+ * while its month's first card is still back in the haze — TITLE_PASS_NEAR
+ * against EVENT_LEAD, both in lib/runner-layout, which is also where the
+ * spacing that stops two titles ever sharing the screen is set.
+ *
+ * A title is painted in its *own* month's ink, written as a literal rather
+ * than read from --bone. That is not a style choice, it is why the type does
+ * not flicker: --bone is a registered custom property that crossfades for
+ * 900ms every time the month changes, and an element whose colour animates has
+ * to be repainted — which for a will-change-transform layer means re-rastering
+ * a word thousands of pixels wide mid-flight, and the browser drops the tiles
+ * it cannot fit. Fixed colours mean the layer is rastered once and thereafter
+ * only transformed. It reads better too: October's name is October's colour,
+ * not a blend of October's and November's.
  */
 export function MonthTitleRunner() {
   const nodes = useRef<Array<HTMLDivElement | null>>([]);
@@ -49,14 +62,14 @@ export function MonthTitleRunner() {
         if (!node) continue;
 
         const distance = CAMERA_Z + monthStartDepths[i] - scrollState.depth;
-        if (distance > APPEAR_FAR || distance < PASS_NEAR) {
+        if (distance > TITLE_APPEAR_FAR || distance < TITLE_PASS_NEAR) {
           if (node.style.visibility !== "hidden") node.style.visibility = "hidden";
           continue;
         }
 
         const scale = CAMERA_Z / distance;
-        const arriving = gsap.utils.mapRange(APPEAR_FAR, APPEAR_NEAR, 0, 1, distance);
-        const leaving = gsap.utils.mapRange(PASS_NEAR, PASS_FAR, 0, 1, distance);
+        const arriving = gsap.utils.mapRange(TITLE_APPEAR_FAR, TITLE_APPEAR_NEAR, 0, 1, distance);
+        const leaving = gsap.utils.mapRange(TITLE_PASS_NEAR, TITLE_PASS_FAR, 0, 1, distance);
         const opacity =
           Math.min(1, Math.max(0, Math.min(arriving, leaving))) *
           gateOpacity(scrollState.depth);
@@ -79,6 +92,7 @@ export function MonthTitleRunner() {
     >
       {months.map((month, i) => {
         const year = years.find((block) => block.year === month.year);
+        const palette = paletteFor(i);
         return (
           <div
             key={month.id}
@@ -90,10 +104,13 @@ export function MonthTitleRunner() {
             className="absolute left-1/2 top-1/2 flex w-[92vw] flex-col items-center will-change-transform"
             style={{ visibility: "hidden" }}
           >
-            <span className="eyebrow text-dim">
+            <span className="eyebrow" style={{ color: palette.dim }}>
               {year?.label ?? month.year} · {month.year}
             </span>
-            <span className="display mt-2 whitespace-nowrap text-[26vw] leading-none text-bone">
+            <span
+              className="display mt-2 whitespace-nowrap text-[26vw] leading-none"
+              style={{ color: palette.text }}
+            >
               {month.monthLabel}
             </span>
           </div>

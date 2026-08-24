@@ -31,14 +31,24 @@ export const FOG_NEAR = 1900;
 export const FOG_FAR = 3200;
 
 /** Depth between consecutive event cards within a month. */
-const EVENT_STEP = 520;
+const EVENT_STEP = 620;
 /**
- * Depth from a month's title to its first card. Long on purpose: the title
- * flies through and is gone before the photographs arrive.
+ * Depth from a month's title to its first card.
+ *
+ * Long on purpose, and the length is not arbitrary: the title is gone by
+ * TITLE_PASS_NEAR, and this is what keeps the month's first card still back in
+ * the haze at that moment rather than sitting behind the letters at full
+ * strength. Shorten it and the type lands on top of a photograph.
  */
-const EVENT_LEAD = 950;
-/** Empty depth after a month's last card, before the next month starts. */
-const MONTH_GAP = 1250;
+const EVENT_LEAD = 2000;
+/**
+ * Empty depth after a month's last card, before the next month starts.
+ *
+ * With EVENT_LEAD this is the whole month break — the stretch the next title
+ * flies through on its own. It is sized so that the incoming title is only at
+ * full strength once the previous month's last card has passed the reader.
+ */
+const MONTH_GAP = 1400;
 /**
  * The intro: the reader flies up to a camera, through its lens, and only then
  * does the first month begin. These are all depths along the same axis as the
@@ -311,7 +321,7 @@ export const INTRO_DEPTH: number = monthDepths[0];
  * month with seven photos gets more scroll than one with four, and the flight
  * speed stays even across all of them.
  */
-export const UNITS_PER_SCREEN = 1500;
+export const UNITS_PER_SCREEN = 1800;
 
 /** How many screens of scrolling a stretch of depth is worth. */
 export function screensFor(depth: number): number {
@@ -336,6 +346,25 @@ export function holdScale(runZ: number): number {
 export const PASS_NEAR = 65;
 /** Where it begins to go — the last moment before the reader passes through it. */
 export const PASS_FAR = 150;
+
+/**
+ * The window a month's title is on screen, in distance-from-camera.
+ *
+ * These live here rather than in MonthTitleRunner because they are half of the
+ * spacing contract: a title is visible over TITLE_APPEAR_FAR - TITLE_PASS_NEAR
+ * of depth, and a month occupies EVENT_LEAD + steps + MONTH_GAP. The second
+ * number has to be the larger one, or two months name themselves at once —
+ * which is exactly what the run used to do.
+ *
+ * TITLE_PASS_NEAR is also what caps how big the type ever gets: apparent scale
+ * is CAMERA_Z / distance, so 380 means a title never rasterises past ~2x. The
+ * reader still flies through the letters — at 2x they are wider than two
+ * screens — without the browser being asked to re-raster a 6000px word.
+ */
+export const TITLE_APPEAR_FAR = 2400;
+export const TITLE_APPEAR_NEAR = 2000;
+export const TITLE_PASS_FAR = 700;
+export const TITLE_PASS_NEAR = 380;
 
 /**
  * Photos hold full strength all the way in and only fade as they cross the
