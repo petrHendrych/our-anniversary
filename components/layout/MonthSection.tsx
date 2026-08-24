@@ -14,6 +14,13 @@ import { sectionId } from "@/lib/timeline";
  * why there are no images here. The copy is sticky, so a month's title holds
  * at the bottom of the screen for as long as the reader is flying through that
  * month, then hands over to the next.
+ *
+ * "Hands over" is not free: a sticky block lets go once its section's bottom
+ * reaches the bottom of the screen, and then rides up the last screenful —
+ * straight through the next month's title, which is flying past at exactly
+ * that point. So the frame is tagged for ScrollDriver, which fades it out
+ * across that last screen. On a phone, where the title fills the frame, that
+ * collision was the whole of the clutter.
  */
 export function MonthSection({ month, index }: { month: Month; index: number }) {
   const meta = [month.date, month.location].filter(Boolean).join(" · ");
@@ -26,13 +33,17 @@ export function MonthSection({ month, index }: { month: Month; index: number }) 
       className="relative z-10"
       style={{ height: `${(screens * 100).toFixed(1)}svh` }}
     >
-      <div className="sticky top-0 flex h-svh flex-col justify-end px-5 pb-24">
-        <div data-month-copy className="max-w-[21rem]">
+      <div
+        data-month-copy-frame
+        className="sticky top-0 flex h-svh flex-col justify-end px-5"
+        style={{ paddingBottom: "calc(5rem + env(safe-area-inset-bottom))" }}
+      >
+        <div data-month-copy className="max-w-[19rem] sm:max-w-[21rem]">
           <p className="eyebrow text-dim">
             {month.monthLabel} {month.year}
           </p>
-          <h3 className="display mt-2 text-[2rem]">{month.title}</h3>
-          <p className="mt-3 text-[0.9375rem] leading-6 text-dim">
+          <h3 className="display mt-2 text-[1.75rem] sm:text-[2rem]">{month.title}</h3>
+          <p className="mt-3 text-[0.875rem] leading-6 text-dim sm:text-[0.9375rem]">
             {month.summary}
           </p>
           {meta && <p className="eyebrow mt-4 text-bone/40">{meta}</p>}

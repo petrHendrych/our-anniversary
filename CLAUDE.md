@@ -36,8 +36,11 @@ devices," not broad compatibility.
    never flown through; `x/y` are plain world offsets that count for little far
    away and more as the photo arrives, which is the outward drift. Both
    MonthCard and MonthDeck place a card with
-   `(photo.holdX * holdScale(runZ) + photo.x) * spread` — they must agree or
-   opening a card jumps. Photos are drawn the whole way in and fade only as
+   `photo.holdX * holdScale(runZ) + photo.x * spread` — they must agree or
+   opening a card jumps. `spread` scales the drift only, because `hold` is
+   already a screen measurement — and `spread` now scales *down* on a phone
+   (it used to be floored at 1), so the outermost card of a month is still
+   reachable there instead of sitting two screen widths off centre. Photos are drawn the whole way in and fade only as
    they cross the camera, like the flying month titles.
 3. **One scroll source of truth.** `lenis` drives real page scroll.
    `gsap` `ScrollTrigger` reads scroll position/progress from Lenis and is

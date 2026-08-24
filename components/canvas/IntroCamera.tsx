@@ -5,7 +5,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { RoundedBox } from "@react-three/drei";
 import * as THREE from "three";
 import { scrollState } from "@/lib/scroll-store";
-import { CAMERA_Z, INTRO_CAMERA_DEPTH, planeScale } from "@/lib/runner-layout";
+import { bodyScale, CAMERA_Z, INTRO_CAMERA_DEPTH } from "@/lib/runner-layout";
 
 /**
  * The camera the reader flies into.
@@ -94,7 +94,7 @@ const materials = {
 export function IntroCamera() {
   const group = useRef<THREE.Group>(null);
   const width = useThree((state) => state.size.width);
-  const scale = planeScale(width);
+  const scale = bodyScale(width);
 
   useFrame(() => {
     const node = group.current;

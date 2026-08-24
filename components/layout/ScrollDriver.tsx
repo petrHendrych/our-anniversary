@@ -102,6 +102,26 @@ export function ScrollDriver() {
       },
     });
 
+    // A month's copy is sticky for the whole section and then lets go for the
+    // last screenful, riding up through the next month's title. Taking it down
+    // over that stretch is legibility rather than decoration, so unlike the
+    // entrance below it is not behind a reduced-motion query — it is scrubbed,
+    // which means it tracks the scroll instead of playing an animation.
+    for (const section of sections) {
+      const frame = section.querySelector<HTMLElement>("[data-month-copy-frame]");
+      if (!frame) continue;
+      gsap.to(frame, {
+        autoAlpha: 0,
+        ease: "none",
+        scrollTrigger: {
+          trigger: section,
+          start: "bottom bottom",
+          end: "bottom 55%",
+          scrub: true,
+        },
+      });
+    }
+
     // Decorative motion only — skipped wholesale when reduced motion is on.
     const mm = gsap.matchMedia();
     mm.add("(prefers-reduced-motion: no-preference)", () => {

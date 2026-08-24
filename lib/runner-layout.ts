@@ -93,13 +93,17 @@ export function gateOpacity(depth: number): number {
  * `hold` is measured on the screen and stays there: its world offset grows in
  * step with distance, so the photo keeps the same apparent distance from the
  * middle of the frame however far away it is. That is what keeps the centre of
- * the screen clear — nothing ever emerges from it or flies through it.
+ * the screen clear — nothing ever emerges from it or flies through it. It is
+ * already a screen measurement, so `spread` is not applied to it; scaling it
+ * with the viewport as well would have collapsed the clearance to a dozen
+ * pixels on a phone, which is no clearance at all.
  *
  * `sweep` is a plain world offset, so it counts for almost nothing while the
  * photo is distant and more and more as it nears. That is the outward drift,
- * and it is deliberately wider than the screen: by the time a photo is large
- * it is out at the edge or past it. Seeing all of a month means panning around
- * — mouse on a desktop, tilting the phone otherwise.
+ * and it is deliberately wide: by the time a photo is large it is out at the
+ * edge of the frame or half past it. Seeing all of a month means panning
+ * around — mouse on a desktop, tilting the phone otherwise. This is the part
+ * `spread` scales, so it is the same share of the frame on every screen.
  */
 const CORNER = 640;
 /**
@@ -120,24 +124,54 @@ const HOLD = 45;
  */
 const BASE_SIZE = 780;
 
+/** The viewport the whole run is authored against. */
+const DESIGN_WIDTH = 1400;
+
 /**
- * Photo *size* is designed at 1400px wide and scaled down from there, which is
- * what keeps a phone from flying through photos each wider than the screen.
- * Depth deliberately does not scale, so the spacing between photos feels the
- * same on every device.
+ * Photo *size*, designed at DESIGN_WIDTH and scaled down from there.
+ *
+ * The falloff is a square root rather than a straight ratio, and that is a
+ * phone fix. Apparent size is governed by the *height* of the frame — the
+ * camera takes its field of view from the viewport height, so one world unit
+ * is one CSS pixel — while this scale is taken from the width. On a wide
+ * desktop those pull the same way; on a tall narrow phone they pull apart, and
+ * a straight ratio gave a card that was a sensible share of the width and a
+ * tiny share of the frame, which is what made the whole scene read as further
+ * away on a phone than on a laptop. The square root closes most of that gap
+ * and leaves every screen at or above 1400px exactly where it was.
  */
 export function planeScale(viewportWidth: number): number {
-  return Math.min(1, viewportWidth / 1400);
+  return Math.min(1, Math.sqrt(viewportWidth / DESIGN_WIDTH));
 }
 
 /**
- * Photo *placement* scales the other way: it never shrinks below the authored
- * spread, so a small screen sees a smaller slice of the same wide arrangement
- * and has to be panned around. On a screen wider than the design width the
- * spread grows with it, so the composition holds.
+ * Scale for a wide object rather than a print — the intro camera's body is
+ * 1150 units across where a card is 780 tall.
+ *
+ * planeScale's square root exists because the prints are portrait and it is
+ * the *height* of the frame that governs how big they look. A landscape object
+ * is governed by the width instead, so it takes the straight ratio: give it
+ * the square root and the camera body hangs half a screen past both edges of a
+ * phone.
+ */
+export function bodyScale(viewportWidth: number): number {
+  return Math.min(1, viewportWidth / DESIGN_WIDTH);
+}
+
+/**
+ * Photo *placement*, in proportion to the screen it is placed on.
+ *
+ * This used to be floored at 1, so a phone got the full desktop spread and had
+ * to be panned around to reach the edges of it. In practice the outermost card
+ * of a month sat the better part of two screen widths off centre and could not
+ * be tapped at all. Scaling straight with the viewport instead means the same
+ * arrangement covers the same share of the frame everywhere — the widest card
+ * is a little over half a screen off centre on a phone exactly as it is on a
+ * desktop, so it always has enough of itself on screen to be reached, and the
+ * tilt still brings the rest of it in.
  */
 export function spreadScale(viewportWidth: number): number {
-  return Math.max(1, viewportWidth / 1400);
+  return viewportWidth / DESIGN_WIDTH;
 }
 
 export interface RunnerPhoto {

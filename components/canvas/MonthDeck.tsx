@@ -261,8 +261,8 @@ function DeckCard({
     const runZ = scrollState.depth - photo.depth;
     const k = holdScale(runZ);
     rest.set(
-      (photo.holdX * k + photo.x) * spread,
-      (photo.holdY * k + photo.y) * spread,
+      photo.holdX * k + photo.x * spread,
+      photo.holdY * k + photo.y * spread,
       runZ,
     );
 

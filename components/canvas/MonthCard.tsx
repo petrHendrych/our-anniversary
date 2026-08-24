@@ -105,8 +105,8 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
     // the photo arrives. See lib/runner-layout.
     const k = holdScale(runZ);
     rest.set(
-      (photo.holdX * k + photo.x) * spread,
-      (photo.holdY * k + photo.y) * spread,
+      photo.holdX * k + photo.x * spread,
+      photo.holdY * k + photo.y * spread,
       runZ,
     );
 
