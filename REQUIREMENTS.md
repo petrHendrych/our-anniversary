@@ -43,19 +43,26 @@ and its caption are drawn into a 2D canvas once and uploaded as a single
 texture, so a card stays one textured quad and the caption travels with it
 through the scene.
 
-## Tap-to-zoom interaction
+## Tap-to-open interaction
 Tapping/clicking a card:
 - Pauses the main scroll and freezes the camera tilt.
 - Lifts that same card out of the run — it is still the same mesh — and holds
   it in front of the reader, face-on, filling most of the screen. The rest of
   the run falls back into the haze and dims behind it.
-- Underneath the card, in DOM: the date and location, the month's summary,
-  and its notes, plus a **Show more** button.
-- **Show more** opens a fullscreen slideshow of that month's photographs —
-  swipe or arrow-key between them, captions underneath, opening on whichever
-  photo was tapped. The WebGL loop pauses while it is up.
-- Tapping outside the card, or Escape, flies it home and resumes the main
-  scroll where it left off.
+- The rest of that month's photographs then fan out **behind** the open card
+  as a shuffled deck, leaning alternately left and right, each one further
+  back, smaller and slightly rotated, peeking out at the sides.
+- Swiping horizontally turns the deck. The card at the front slides away and
+  tucks in at the very back; the next one takes its place. It loops for ever
+  in both directions, and a flick turns exactly one card.
+- Tapping a photograph peeking out of the pile brings it to the front.
+- Tapping empty space, pressing Escape, or swiping down flies the card at the
+  front back to its own place in the run and resumes the main scroll where it
+  left off.
+
+There is no DOM in the open state at all — no copy, no buttons, no chrome.
+Each photograph's caption is printed into its own card, so the text is in the
+scene with everything else.
 
 ## Data model
 All content is static and hand-authored — no CMS, no backend.
@@ -78,8 +85,8 @@ interface Month {
   summary: string;        // 1-2 sentence teaser shown on the card itself
   date?: string;          // specific date, if there's one headline event
   location?: string;
-  gallery: MemoryPhoto[]; // full photo set shown in the slideshow
-  notes?: string;         // longer story text shown under the zoomed card
+  gallery: MemoryPhoto[]; // the rest of the deck behind the cover
+  notes?: string;         // longer story text (not shown yet — see below)
 }
 
 interface YearBlock {
@@ -97,7 +104,7 @@ interface YearBlock {
 | 3D scene | `@react-three/fiber` + `@react-three/drei`, on top of `three` | R3F over raw three.js — declarative components, automatic scene cleanup on unmount, much easier for AI-assisted code to reason about. |
 | Scroll | `lenis` (not `@studio-freight/lenis` — renamed) | React usage via `lenis/react`. |
 | Scroll-linked animation | `gsap` + `@gsap/react` (`useGSAP` hook) + `ScrollTrigger` | All GSAP plugins, including ScrollTrigger, are free since Webflow's 2025 acquisition — no Club GreenSock membership or license key needed. |
-| Overlay motion + slideshow swipe | `motion` (not `framer-motion` — renamed, same API) | Import from `motion/react`. Also handles the drag gestures — no separate carousel library. |
+| DOM motion | `motion` (not `framer-motion` — renamed, same API) | Import from `motion/react`. Installed but currently unimported: the open state is entirely 3D. |
 | Styling | Tailwind CSS | |
 | Images | Next.js `<Image />`, pre-resized source assets | See performance rules. |
 | Deployment | Vercel, no custom domain, `vercel` CLI | |
@@ -118,6 +125,12 @@ interface YearBlock {
 4. Even though the whole target device pool is high-end, still profile on
    the actual two phones the site will be viewed on before calling it done.
 
+## Not built yet
+`Month.summary`, `Month.notes`, `Month.date` and `Month.location` are authored
+in the data but nothing displays them any more — the deck replaced the copy
+that used to sit under the open card. Somewhere to read a month's story is
+still wanted; where it goes is undecided.
+
 ## Non-goals (explicitly out of scope)
 - Broad device/browser compatibility.
 - SEO, analytics, CMS/admin backend.
@@ -128,6 +141,6 @@ interface YearBlock {
 
 ## Content you need to gather before/while building
 - Final list of months with at least a cover photo and short title/summary.
-- Full photo sets for each month's slideshow.
+- Full photo sets for each month's deck.
 - Any specific dates/locations worth calling out.
 - Freeform notes/story text per month (optional, can be added incrementally).

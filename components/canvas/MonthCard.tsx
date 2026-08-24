@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { scrollState } from "@/lib/scroll-store";
-import { focusCard, focusState, setFocusBottom } from "@/lib/focus-store";
+import { focusCard, focusState } from "@/lib/focus-store";
 import { FOCUS_DISTANCE, focusPose } from "@/lib/focus-layout";
 import {
   gateOpacity,
@@ -18,7 +18,7 @@ import { acquireCardTexture, releaseCardTexture } from "@/lib/card-texture";
 const PASSED = 240;
 /** Only a photo this near the camera plane answers a tap. */
 const TAP_RANGE = 700;
-/** How far the rest of the run dims and falls back while one card is open. */
+/** How far the rest of the run dims and falls back while a deck is open. */
 const DIM = 0.72;
 const RECEDE = 140;
 
@@ -32,20 +32,22 @@ const camQ = new THREE.Quaternion();
 const restQ = new THREE.Quaternion();
 
 /**
- * One photograph as a printed card.
+ * One photograph as a printed card, in the run.
  *
  * The card reads `scrollState.depth` straight out of the store inside
  * useFrame — no React state, no re-renders while scrolling. Its Z is simply
  * `depth - photo.depth`: negative while the photo is still ahead in the haze,
  * zero as it passes the camera plane, positive once it is behind the reader.
+ * Position, rotation and scale are all written per frame rather than passed as
+ * props, so a React re-render can never fight the loop.
  *
  * Distance fade is the scene's fog, not per-card opacity, so photos surface
  * out of the background colour instead of cross-dissolving over it.
  *
- * Tapping one flies it out of the run and holds it in front of the reader.
- * Position, rotation and scale are therefore all written every frame rather
- * than passed as props — a React re-render would otherwise snap a card that is
- * mid-flight back to wherever it sits in the run.
+ * Tapping one flies it out of the run and holds it in front of the reader —
+ * and that flight is this card's own, not the deck's. Only once it has landed
+ * does MonthDeck take over, at the identical pose, to fan the rest of the
+ * month out behind it and let the reader swipe through them.
  */
 export function MonthCard({ photo }: { photo: RunnerPhoto }) {
   const mesh = useRef<THREE.Mesh>(null);
@@ -78,14 +80,6 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
     };
   }, [photo.src, photo.caption]);
 
-  // A rotation while the card is open moves where it lands, and the copy
-  // underneath is positioned from that.
-  useEffect(() => {
-    if (focusState.key !== photo.key || !width) return;
-    const pose = focusPose(size.width, size.height, width * scale, height * scale);
-    setFocusBottom(pose.bottom);
-  }, [photo.key, width, height, scale, size.width, size.height]);
-
   useFrame(() => {
     const node = mesh.current;
     const surface = material.current;
@@ -95,7 +89,10 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
     const gate = gateOpacity(scrollState.depth);
     const w = width * scale;
     const h = height * scale;
-    const t = focusState.key === photo.key ? focusState.t : 0;
+    // This card flies only until the deck takes over; from then on the deck
+    // draws every photograph of the open month, this one included.
+    const t =
+      focusState.key === photo.key && !focusState.handed ? focusState.t : 0;
 
     rest.set(photo.x * spread, photo.y * spread, runZ);
 
@@ -103,12 +100,15 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
       // Whatever is open takes the run's attention with it: the rest of the
       // photographs fall back into the haze and dim, rather than the open card
       // having to be lit against them.
-      const away = focusState.key ? focusState.t : 0;
+      const away = focusState.monthId ? focusState.t : 0;
       node.position.copy(rest);
       node.position.z -= RECEDE * away;
       node.rotation.z = photo.roll;
       node.scale.set(w, h, 1);
-      node.visible = runZ < PASSED;
+      node.visible =
+        runZ < PASSED &&
+        // Once handed over, the deck holds this month's copies.
+        !(focusState.handed && focusState.monthId === photo.monthId);
       if (node.renderOrder !== 0) {
         node.renderOrder = 0;
         surface.depthTest = true;
@@ -157,8 +157,8 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
     const start = pointerDown.current;
     pointerDown.current = null;
     if (!start || !mesh.current) return;
-    // One card at a time; the overlay above is what closes the open one.
-    if (focusState.key) return;
+    // One deck at a time; while one is open, a tap out here closes it instead.
+    if (focusState.monthId) return;
 
     // A drag that happened to start on a photo is a scroll, not a tap.
     const travel = Math.hypot(event.clientX - start.x, event.clientY - start.y);
@@ -167,8 +167,7 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
     if (Math.abs(scrollState.depth - photo.depth) > TAP_RANGE) return;
 
     event.stopPropagation();
-    const pose = focusPose(size.width, size.height, width * scale, height * scale);
-    focusCard(photo.key, photo.monthId, pose.bottom);
+    focusCard(photo.key, photo.monthId, photo.slide);
   }
 
   if (!texture || !image) return null;

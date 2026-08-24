@@ -95,6 +95,12 @@ html[data-focused] [data-title-runner] {
   opacity: 0;
 }
 
+/* A deck is turned by dragging across the canvas; the browser must not read
+   those drags as scrolling or pinching first. */
+html[data-focused] canvas {
+  touch-action: none;
+}
+
 main,
 [data-title-runner] {
   transition: opacity 300ms ease;

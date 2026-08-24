@@ -1,13 +1,13 @@
 "use client";
 
 /**
- * Which card the reader has tapped open.
+ * Which month the reader has tapped open, and where the deck has been spun to.
  *
- * Same shape as lib/scroll-store, and for the same reason: `t` — how far the
- * card has flown out of the run and towards the reader — changes every frame
- * and is only ever read from inside the render loop, so it updates silently.
- * The handful of things React genuinely needs to know about (which month is
- * open, whether the card has landed, whether the slideshow is up) notify.
+ * Same shape as lib/scroll-store, and for the same reason: `t`, `spread` and
+ * `cursor` all change every frame — the first two while the deck flies in and
+ * out, the third under the reader's finger — and are only ever read from
+ * inside the render loop, so they update silently. Only `monthId` notifies,
+ * because that is the one thing React has to mount and unmount on.
  *
  * GSAP owns the easing. Its ticker is already the page's only clock, so
  * tweening this object costs no new loop.
@@ -16,30 +16,45 @@ import { useSyncExternalStore } from "react";
 import gsap from "gsap";
 
 interface FocusState {
-  /** RunnerPhoto.key of the focused card — which is its src. */
-  key: string | null;
   monthId: string | null;
-  /** 0 while the card is in the run, 1 once it has landed in front of the reader. */
-  t: number;
-  /** True once the flight out has finished; false the moment it starts back. */
-  landed: boolean;
   /**
-   * Viewport Y, in pixels, of the bottom edge of the landed card. The card is
-   * the only thing that knows its own aspect ratio, so it publishes where it
-   * will come to rest and the DOM column underneath sits on that — no
-   * per-frame projection of the mesh.
+   * RunnerPhoto.key of the card that was tapped. The run card itself flies
+   * that one out — the same code that has always done it — and only hands
+   * over to the deck once it has landed.
    */
-  bottom: number;
-  slideshow: boolean;
+  key: string | null;
+  /**
+   * False while the tapped run card is still flying; true from the moment it
+   * lands until the month is closed. The deck draws nothing before it, and
+   * everything after it — including the flight home, which by then may be a
+   * different photograph's.
+   */
+  handed: boolean;
+  /** Index within the month's photos of the card that was tapped. */
+  origin: number;
+  /**
+   * Position around the deck. Deliberately *not* wrapped: it runs negative or
+   * past the end and only the ring maths folds it back, which is what keeps a
+   * tween across the seam from unwinding the long way round.
+   */
+  cursor: number;
+  /** 0 in the run, 1 landed in front of the reader. */
+  t: number;
+  /** 0 stacked behind the front card, 1 fanned out into the pile. */
+  spread: number;
+  /** True between the end of the flight out and the start of the flight home. */
+  landed: boolean;
 }
 
 const state: FocusState = {
-  key: null,
   monthId: null,
+  key: null,
+  handed: false,
+  origin: 0,
+  cursor: 0,
   t: 0,
+  spread: 0,
   landed: false,
-  bottom: 0,
-  slideshow: false,
 };
 
 /** True for the length of the flight home, so a second tap cannot restart it. */
@@ -59,13 +74,14 @@ function subscribe(listener: () => void): () => void {
 /** Live, mutable read for animation loops. Never mutate from outside. */
 export const focusState: Readonly<FocusState> = state;
 
-export function focusCard(key: string, monthId: string, bottom: number): void {
-  if (state.key === key || closing) return;
-  state.key = key;
+export function focusCard(key: string, monthId: string, origin: number): void {
+  if (state.monthId || closing) return;
   state.monthId = monthId;
-  state.bottom = bottom;
+  state.key = key;
+  state.handed = false;
+  state.origin = origin;
+  state.cursor = origin;
   state.landed = false;
-  state.slideshow = false;
   notify();
 
   gsap.killTweensOf(state);
@@ -75,84 +91,67 @@ export function focusCard(key: string, monthId: string, bottom: number): void {
     ease: "power3.out",
     onComplete: () => {
       state.landed = true;
+      // The deck takes over here and not a moment earlier. Its front card is
+      // at exactly the pose the run card just reached — same texture, same
+      // transform, `spread` still zero — so the swap cannot be seen.
+      state.handed = true;
       notify();
+      // Only now does the pile fan out from behind it.
+      gsap.to(state, { spread: 1, duration: 0.45, ease: "power3.out" });
     },
   });
 }
 
 export function releaseFocus(): void {
-  if (!state.key || closing) return;
+  if (!state.monthId || closing) return;
   closing = true;
   state.landed = false;
-  state.slideshow = false;
-  notify();
 
-  gsap.killTweensOf(state);
+  // Whichever card is at the front is the one that flies home, so the deck is
+  // squared up first — closing mid-swipe should not send two cards back.
+  gsap.killTweensOf(state, "cursor");
+  state.cursor = Math.round(state.cursor);
+
+  gsap.killTweensOf(state, "t,spread");
+  gsap.to(state, { spread: 0, duration: 0.25, ease: "power2.in" });
   gsap.to(state, {
     t: 0,
     duration: 0.45,
+    delay: 0.1,
     ease: "power2.inOut",
     onComplete: () => {
-      // Only now does the card stop being the focused one — it has to keep
-      // reading its own flight all the way back into the run.
-      state.key = null;
+      // Only now does the month stop being open — its cards have to keep
+      // reading their own flight all the way back into the run.
       state.monthId = null;
+      state.key = null;
+      state.handed = false;
+      state.cursor = 0;
+      state.origin = 0;
       closing = false;
       notify();
     },
   });
 }
 
-/** Called again if the viewport changes shape while a card is open. */
-export function setFocusBottom(bottom: number): void {
-  if (state.bottom === bottom) return;
-  state.bottom = bottom;
-  notify();
+/** Under the finger: the cursor follows the drag directly. */
+export function dragDeck(cursor: number): void {
+  gsap.killTweensOf(state, "cursor");
+  state.cursor = cursor;
 }
 
-export function openSlideshow(): void {
-  if (!state.monthId || state.slideshow) return;
-  state.slideshow = true;
-  notify();
+/** On release: settle on a whole card — the nearest one, or the one asked for. */
+export function settleDeck(to?: number): void {
+  if (!state.monthId) return;
+  const target = to ?? Math.round(state.cursor);
+  gsap.killTweensOf(state, "cursor");
+  gsap.to(state, { cursor: target, duration: 0.35, ease: "power2.out" });
 }
 
-export function closeSlideshow(): void {
-  if (!state.slideshow) return;
-  state.slideshow = false;
-  notify();
-}
-
-/** Re-renders when a card opens and again once it is fully closed. */
+/** Re-renders when a month opens and again once it is fully closed. */
 export function useFocusedMonthId(): string | null {
   return useSyncExternalStore(
     subscribe,
     () => state.monthId,
     () => null,
-  );
-}
-
-/** Re-renders twice per open: on arrival, and when the card starts back. */
-export function useFocusLanded(): boolean {
-  return useSyncExternalStore(
-    subscribe,
-    () => state.landed,
-    () => false,
-  );
-}
-
-/** Where the copy underneath the open card starts, in viewport pixels. */
-export function useFocusBottom(): number {
-  return useSyncExternalStore(
-    subscribe,
-    () => state.bottom,
-    () => 0,
-  );
-}
-
-export function useSlideshowOpen(): boolean {
-  return useSyncExternalStore(
-    subscribe,
-    () => state.slideshow,
-    () => false,
   );
 }

@@ -109,6 +109,8 @@ export interface RunnerPhoto {
   monthIndex: number;
   /** Index into `photos` — position along the whole run. */
   photoIndex: number;
+  /** Position within its own month — 0 is the cover. Where its deck opens. */
+  slide: number;
   /** Distance from the start of the run. Grows as the reader scrolls. */
   depth: number;
   /** Centre offset in world units, before planeScale(). */
@@ -137,6 +139,17 @@ function hash(text: string): number {
   return h >>> 0;
 }
 
+/**
+ * A generator for one photo, seeded from its own source path.
+ *
+ * Deterministic per photo, which is what lets both the run and the deck give
+ * the same photograph the same character — its tilt in the run, the side it
+ * leans to in a pile — without either of them storing anything.
+ */
+export function rngFor(src: string): () => number {
+  return rng(hash(src));
+}
+
 /** mulberry32 — small and deterministic; only used for gentle per-photo variety. */
 function rng(seed: number): () => number {
   let a = seed;
@@ -155,6 +168,9 @@ const photos: RunnerPhoto[] = [];
 const monthDepths: number[] = [];
 /** Depth each month occupies, including its trailing gap. */
 const monthSpans: number[] = [];
+/** Where each month's photos sit in `photos`. They are laid down month by
+    month, so a month is always one contiguous slice. */
+const monthRanges: Array<{ from: number; to: number }> = [];
 
 {
   // Months start on the far side of the camera; nothing of them exists before it.
@@ -164,6 +180,7 @@ const monthSpans: number[] = [];
     monthDepths.push(cursor);
 
     const sources = [month.coverImage, ...month.gallery.map((photo) => photo.src)];
+    const from = photos.length;
 
     sources.forEach((src, i) => {
       const random = rng(hash(src));
@@ -185,6 +202,7 @@ const monthSpans: number[] = [];
         caption: i === 0 ? month.title : (month.gallery[i - 1].caption ?? month.title),
         monthIndex,
         photoIndex: photos.length,
+        slide: i,
         // Jitter is under half a step, so photo depths stay strictly ascending
         // for nearestPhotoIndex() while the run stops reading as a ladder.
         depth: cursor + PHOTO_LEAD + i * PHOTO_STEP + between(random, -70, 70),
@@ -195,12 +213,23 @@ const monthSpans: number[] = [];
       });
     });
 
+    monthRanges.push({ from, to: photos.length });
     cursor = photos[photos.length - 1].depth + MONTH_GAP;
     monthSpans.push(cursor - monthDepths[monthIndex]);
   });
 }
 
 export const runnerPhotos: RunnerPhoto[] = photos;
+
+/**
+ * Every photograph of one month, in the order they appear in the run — the
+ * cover first, then the gallery. This is the deck a tapped card opens into.
+ */
+export function photosForMonth(monthIndex: number): RunnerPhoto[] {
+  const range = monthRanges[monthIndex];
+  return range ? photos.slice(range.from, range.to) : [];
+}
+
 export const monthStartDepths: number[] = monthDepths;
 export const monthDepthSpans: number[] = monthSpans;
 export const runnerDepth: number = monthDepths[monthDepths.length - 1] + monthSpans[monthSpans.length - 1];

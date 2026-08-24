@@ -1,6 +1,6 @@
 import { MonthRunner } from "@/components/canvas/MonthRunner";
 import { AfterLens } from "@/components/layout/AfterLens";
-import { FocusOverlay } from "@/components/focus/FocusOverlay";
+import { FocusMode } from "@/components/focus/FocusMode";
 import { IntroSection } from "@/components/layout/IntroSection";
 import { MonthSection } from "@/components/layout/MonthSection";
 import { MonthTitleRunner } from "@/components/layout/MonthTitleRunner";
@@ -45,7 +45,7 @@ export default function Home() {
         <OutroSection />
       </main>
 
-      <FocusOverlay />
+      <FocusMode />
     </>
   );
 }
