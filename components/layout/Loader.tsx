@@ -147,7 +147,7 @@ export function Loader() {
                         duration: 0.65,
                         ease: [0.22, 0.61, 0.36, 1],
                       }}
-                      className="relative flex h-20 w-20 items-center justify-center rounded-full border border-lit text-lit"
+                      className="relative cursor-pointer flex h-20 w-20 items-center justify-center rounded-full border border-lit text-lit"
                     >
                       {/* Barely-there breathing, so it still reads as waiting for
                         a tap a minute after it arrived. */}
