@@ -43,7 +43,32 @@ export function MonthTitleRunner() {
   const nodes = useRef<Array<HTMLDivElement | null>>([]);
 
   useEffect(() => {
+    // What each node was last told. A title is on screen for a second or two
+    // out of the whole page, so almost every frame has nothing to say to
+    // almost every node — and a style write it cannot skip is a style write
+    // the browser has to consider.
+    const drawn: Array<boolean> = months.map(() => false);
+
+    const hide = (i: number) => {
+      if (!drawn[i]) return;
+      drawn[i] = false;
+      const node = nodes.current[i];
+      if (!node) return;
+      node.style.visibility = "hidden";
+      // Only a title that is actually flying is worth a compositor layer of
+      // its own. Twenty-four permanently promoted layers, each holding a word
+      // set at a quarter of the screen's width, is a lot of texture memory to
+      // keep for one of them at a time.
+      node.style.willChange = "auto";
+    };
+
     const update = () => {
+      // Before the lens there are no months at all — see IntroCamera.
+      if (!scrollState.entered) {
+        for (let i = 0; i < months.length; i++) hide(i);
+        return;
+      }
+
       // A camera rotation shifts everything on screen by roughly focal ×
       // tan(angle), whatever its depth — so the titles pan with the photos
       // instead of staying pinned to the middle while the scene moves.
@@ -51,21 +76,14 @@ export function MonthTitleRunner() {
       const panY = CAMERA_Z * Math.tan(tiltCurrent.x);
 
       for (let i = 0; i < months.length; i++) {
-        // Before the lens there are no months at all — see IntroCamera.
-        if (!scrollState.entered) {
-          const node = nodes.current[i];
-          if (node) node.style.visibility = "hidden";
+        const distance = CAMERA_Z + monthStartDepths[i] - scrollState.depth;
+        if (distance > TITLE_APPEAR_FAR || distance < TITLE_PASS_NEAR) {
+          hide(i);
           continue;
         }
 
         const node = nodes.current[i];
         if (!node) continue;
-
-        const distance = CAMERA_Z + monthStartDepths[i] - scrollState.depth;
-        if (distance > TITLE_APPEAR_FAR || distance < TITLE_PASS_NEAR) {
-          if (node.style.visibility !== "hidden") node.style.visibility = "hidden";
-          continue;
-        }
 
         const scale = CAMERA_Z / distance;
         const arriving = gsap.utils.mapRange(TITLE_APPEAR_FAR, TITLE_APPEAR_NEAR, 0, 1, distance);
@@ -74,8 +92,12 @@ export function MonthTitleRunner() {
           Math.min(1, Math.max(0, Math.min(arriving, leaving))) *
           gateOpacity(scrollState.depth);
 
-        node.style.visibility = "visible";
-        node.style.opacity = String(opacity);
+        if (!drawn[i]) {
+          drawn[i] = true;
+          node.style.willChange = "transform";
+          node.style.visibility = "visible";
+        }
+        node.style.opacity = opacity.toFixed(3);
         node.style.transform = `translate3d(calc(-50% + ${panX.toFixed(1)}px), calc(-50% + ${panY.toFixed(1)}px), 0) scale(${scale.toFixed(4)})`;
       }
     };
@@ -101,7 +123,7 @@ export function MonthTitleRunner() {
             }}
             // Positioned at the centre of the screen and scaled from there,
             // which is where the camera axis passes through.
-            className="absolute left-1/2 top-1/2 flex w-[92vw] flex-col items-center will-change-transform"
+            className="absolute left-1/2 top-1/2 flex w-[92vw] flex-col items-center"
             style={{ visibility: "hidden" }}
           >
             <span className="eyebrow" style={{ color: palette.dim }}>

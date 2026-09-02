@@ -17,15 +17,38 @@ import * as THREE from "three";
  * prints are retained rather than disposed so that scrubbing back and forth
  * across a month boundary re-bakes nothing.
  *
- * Framing is cheaper than what it replaced: the photograph is downsampled to
- * PHOTO_MAX on its way into the canvas, so a 1200x1600 cover now costs roughly
- * half the GPU memory it did when it was uploaded at full size.
+ * Framing is cheaper than what it replaced: the photograph is downsampled on
+ * its way into the canvas (see photoLimit), so a 1200x1600 cover costs a
+ * fraction of the GPU memory it did when it was uploaded at full size.
+ *
+ * Bakes are also serialized — one at a time, nearest card first. See enqueue.
  */
 
-const RETAINED = 10;
+const RETAINED = 6;
 
-/** Longest edge of the photograph inside the print, in texture pixels. */
-const PHOTO_MAX = 1024;
+/**
+ * Longest edge of the photograph inside the print, in texture pixels.
+ *
+ * Resolved once per session rather than per bake: a print is cached under its
+ * source path, so a number that changed with the viewport would leave two
+ * sizes of the same card in the cache and no way to tell them apart.
+ *
+ * A phone gets the smaller one, and it is not a compromise — MAX_CARD_SHARE
+ * caps a print at 62% of the viewport, so on a 390pt screen the photograph
+ * inside it is around 460 device pixels wide at its very largest. 1024 was
+ * paying four times the memory and four times the upload for detail no screen
+ * that size can show, and the upload is what the reader feels: every new
+ * texture is a synchronous hand-off to the GPU, mipmaps included, in the
+ * middle of a frame.
+ */
+const NARROW = 900;
+let photoMax = 0;
+
+function photoLimit(): number {
+  if (!photoMax) photoMax = window.innerWidth < NARROW ? 768 : 1024;
+  return photoMax;
+}
+
 /** Border on the left, right and top, as a fraction of the photo's width. */
 const SIDE = 0.055;
 /** The deep border along the bottom, where the caption is set. */
@@ -130,7 +153,7 @@ function drawPrint(
   caption: string,
   face: string,
 ): HTMLCanvasElement {
-  const fit = PHOTO_MAX / Math.max(sourceWidth, sourceHeight);
+  const fit = photoLimit() / Math.max(sourceWidth, sourceHeight);
   const pw = Math.round(sourceWidth * fit);
   const ph = Math.round(sourceHeight * fit);
 
@@ -182,6 +205,86 @@ function drawPrint(
   return canvas;
 }
 
+/**
+ * Bakes run one at a time, nearest card first.
+ *
+ * A bake is a fetch, an `ImageBitmap` decode, a canvas the size of a print
+ * drawn with a blurred shadow, and then — the moment the card first draws — a
+ * synchronous texture upload with mipmaps. Any one of those inside a frame is
+ * survivable. The problem was that a fast flick moves the mount window several
+ * cards in a single frame, so half a dozen of them fired at once and the page
+ * spent the next few frames doing nothing else. One at a time turns a stall
+ * into a card that arrives a frame or two late, out in the haze where nobody
+ * is looking at it yet.
+ *
+ * Queued work is taken nearest-first: `priority` is read at dequeue time, not
+ * at enqueue time, so a card the reader has already scrolled past loses its
+ * place to one that is about to arrive.
+ */
+interface Job {
+  key: string;
+  priority: () => number;
+  run: () => void;
+  drop: () => void;
+}
+
+const queue: Job[] = [];
+let running = false;
+
+/** A card that has scrolled out of the mount window is no longer worth baking. */
+const wanted = (key: string) => (refs.get(key) ?? 0) > 0;
+
+function pump() {
+  if (running) return;
+
+  // Abandoned work first: a flick through half a year queues a card a frame
+  // and unmounts most of them again before their turn comes round. Baking
+  // those anyway is how a queue meant to smooth the scroll ends up being the
+  // thing that stalls it.
+  for (let i = queue.length - 1; i >= 0; i--) {
+    if (!wanted(queue[i].key)) queue.splice(i, 1)[0].drop();
+  }
+  if (queue.length === 0) return;
+
+  let best = 0;
+  for (let i = 1; i < queue.length; i++) {
+    if (queue[i].priority() < queue[best].priority()) best = i;
+  }
+  const job = queue.splice(best, 1)[0];
+  running = true;
+  job.run();
+}
+
+class Abandoned extends Error {}
+
+function enqueue<T>(
+  key: string,
+  priority: () => number,
+  work: () => Promise<T>,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    queue.push({
+      key,
+      priority,
+      // `pending` is cleared here rather than in the rejection handler: that
+      // runs a microtask later, and a card that remounts in between would
+      // otherwise attach itself to an already-rejected bake and never draw.
+      drop: () => {
+        pending.delete(key);
+        reject(new Abandoned(key));
+      },
+      run: () =>
+        work()
+          .then(resolve, reject)
+          .finally(() => {
+            running = false;
+            pump();
+          }),
+    });
+    pump();
+  });
+}
+
 async function bake(src: string, caption: string): Promise<THREE.CanvasTexture> {
   const [source, face] = await Promise.all([decode(src), captionFamily()]);
   const width = source instanceof HTMLImageElement ? source.naturalWidth : source.width;
@@ -192,7 +295,10 @@ async function bake(src: string, caption: string): Promise<THREE.CanvasTexture> 
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 4;
+  // A print faces the reader — the camera only ever leans by a third of a
+  // radian — so anisotropic filtering has nothing oblique to sharpen, and at
+  // dpr 2 with cards overlapping it was paying four taps a fragment for it.
+  texture.anisotropy = 1;
   return texture;
 }
 
@@ -222,7 +328,12 @@ function retire(key: string) {
   }
 }
 
-export function acquireCardTexture(src: string, caption: string): Promise<THREE.Texture> {
+export function acquireCardTexture(
+  src: string,
+  caption: string,
+  /** Distance-from-camera of the card asking, read when the queue picks. */
+  priority: () => number = () => 0,
+): Promise<THREE.Texture> {
   const key = keyFor(src, caption);
   refs.set(key, (refs.get(key) ?? 0) + 1);
   unretire(key);
@@ -230,9 +341,9 @@ export function acquireCardTexture(src: string, caption: string): Promise<THREE.
   const cached = cache.get(key);
   if (cached) return Promise.resolve(cached);
 
-  let baking = pending.get(key);
-  if (!baking) {
-    baking = bake(src, caption).then((texture) => {
+  let inflight = pending.get(key);
+  if (!inflight) {
+    inflight = enqueue(key, priority, () => bake(src, caption)).then((texture) => {
       cache.set(key, texture);
       pending.delete(key);
       // The card may already have scrolled out of the window while this was in
@@ -240,16 +351,17 @@ export function acquireCardTexture(src: string, caption: string): Promise<THREE.
       if ((refs.get(key) ?? 0) === 0) retire(key);
       return texture;
     });
-    baking = baking.catch((error) => {
+    inflight = inflight.catch((error) => {
       // Otherwise the failed key sits in `pending` forever and the card can
-      // never be retried, even after a scroll away and back.
+      // never be retried, even after a scroll away and back. The reference
+      // stays where it is: the card that took it releases it on unmount like
+      // any other, and dropping it here as well double-counted.
       pending.delete(key);
-      refs.delete(key);
       throw error;
     });
-    pending.set(key, baking);
+    pending.set(key, inflight);
   }
-  return baking;
+  return inflight;
 }
 
 export function releaseCardTexture(src: string, caption: string): void {

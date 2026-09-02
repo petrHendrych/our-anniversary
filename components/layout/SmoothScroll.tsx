@@ -69,7 +69,12 @@ export function SmoothScroll({ children }: { children: React.ReactNode }) {
         // site is only ever opened on phones. It is on so the runner tracks
         // the finger through one smoothed value instead of raw momentum.
         syncTouch: true,
-        syncTouchLerp: 0.08,
+        // Was 0.08, which is a lot of smoothing to put between a finger and
+        // the run: a fast flick moved the target most of a month away and the
+        // scene then crawled after it, which reads as lag rather than as
+        // smoothness. Enough to take the steps out of a touch scroll, not
+        // enough to feel detached from the finger.
+        syncTouchLerp: 0.12,
         touchInertiaExponent: 1.7,
       }}
     >

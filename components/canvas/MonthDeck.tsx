@@ -15,14 +15,16 @@ import { FOCUS_DISTANCE, focusPose } from "@/lib/focus-layout";
 import { deckSeed, pilePose, ringOffset } from "@/lib/deck-layout";
 import {
   CAMERA_Z,
+  fitScale,
   gateOpacity,
   holdScale,
   photosForEvent,
-  planeScale,
-  spreadScale,
+  spreadScaleX,
+  spreadScaleY,
   type RunnerPhoto,
 } from "@/lib/runner-layout";
 import { acquireCardTexture, releaseCardTexture } from "@/lib/card-texture";
+import { CARD_GEOMETRY } from "@/components/canvas/MonthCard";
 
 /** Share of the screen a finger has to travel to turn the deck by one card. */
 const SWIPE_SPAN = 0.55;
@@ -210,12 +212,15 @@ function DeckCard({
   const size = useThree((state) => state.size);
   const seed = useMemo(() => deckSeed(photo.src), [photo.src]);
 
-  const scale = planeScale(size.width);
-  const spread = spreadScale(size.width);
   const image = texture?.image as { width: number; height: number } | undefined;
   const longest = image ? Math.max(image.width, image.height) : 1;
   const width = image ? (photo.size * image.width) / longest : 0;
   const height = image ? (photo.size * image.height) / longest : 0;
+  // The same three numbers MonthCard computes, from the same arguments — the
+  // hand-over is only invisible because they agree exactly.
+  const scale = fitScale(size.width, width);
+  const spreadX = spreadScaleX(size.width);
+  const spreadY = spreadScaleY(size.width, size.height);
 
   useEffect(() => {
     let alive = true;
@@ -261,8 +266,8 @@ function DeckCard({
     const runZ = scrollState.depth - photo.depth;
     const k = holdScale(runZ);
     rest.set(
-      photo.holdX * k + photo.x * spread,
-      photo.holdY * k + photo.y * spread,
+      photo.holdX * k + photo.x * spreadX,
+      photo.holdY * k + photo.y * spreadY,
       runZ,
     );
 
@@ -315,8 +320,12 @@ function DeckCard({
   if (!texture || !image) return null;
 
   return (
-    <mesh ref={mesh} visible={false} onPointerUp={handlePointerUp}>
-      <planeGeometry args={[1, 1]} />
+    <mesh
+      ref={mesh}
+      geometry={CARD_GEOMETRY}
+      visible={false}
+      onPointerUp={handlePointerUp}
+    >
       <meshBasicMaterial
         ref={material}
         map={texture}

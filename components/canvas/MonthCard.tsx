@@ -8,13 +8,15 @@ import { focusCard, focusState } from "@/lib/focus-store";
 import { FOCUS_DISTANCE, focusPose } from "@/lib/focus-layout";
 import {
   CAMERA_Z,
+  fitScale,
+  FOG_FAR,
   gateOpacity,
   holdScale,
   passOpacity,
   PASS_NEAR,
   photosForEvent,
-  planeScale,
-  spreadScale,
+  spreadScaleX,
+  spreadScaleY,
   type RunnerPhoto,
 } from "@/lib/runner-layout";
 import { acquireCardTexture, releaseCardTexture } from "@/lib/card-texture";
@@ -24,6 +26,17 @@ const TAP_RANGE = 700;
 /** How far the rest of the run dims and falls back while a deck is open. */
 const DIM = 0.72;
 const RECEDE = 140;
+
+/**
+ * One geometry for every print in the run, ever.
+ *
+ * Cards are unit quads scaled per frame, so there was never anything
+ * card-specific in the buffer — and a fresh one per mount meant allocating and
+ * uploading a vertex buffer, then disposing it, every time the mount window
+ * moved. On a fast flick that is several a second for no difference on screen.
+ * The deck shares it too, so a card that opens keeps the geometry it flew in on.
+ */
+export const CARD_GEOMETRY = new THREE.PlaneGeometry(1, 1);
 
 /** Per-frame scratch — module-level so a card allocates nothing while flying. */
 const FORWARD = new THREE.Vector3(0, 0, 1);
@@ -62,17 +75,23 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
   const camera = useThree((state) => state.camera);
   const size = useThree((state) => state.size);
 
-  const scale = planeScale(size.width);
-  const spread = spreadScale(size.width);
-  // Planes are unit-sized and scaled, so one geometry serves every card.
   const image = texture?.image as { width: number; height: number } | undefined;
   const longest = image ? Math.max(image.width, image.height) : 1;
   const width = image ? (photo.size * image.width) / longest : 0;
   const height = image ? (photo.size * image.height) / longest : 0;
+  // Placement, in the two parts described in lib/runner-layout. `fitScale`
+  // needs the print's own width, so it is only right once the texture is in.
+  const scale = fitScale(size.width, width);
+  const spreadX = spreadScaleX(size.width);
+  const spreadY = spreadScaleY(size.width, size.height);
 
   useEffect(() => {
     let alive = true;
-    acquireCardTexture(photo.src, photo.caption)
+    // Nearest first: a flick can queue half a month at once, and the card
+    // about to arrive matters more than the one already going past.
+    acquireCardTexture(photo.src, photo.caption, () =>
+      Math.abs(scrollState.depth - photo.depth),
+    )
       .then((loaded) => {
         if (alive) setTexture(loaded);
       })
@@ -83,7 +102,7 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
       alive = false;
       releaseCardTexture(photo.src, photo.caption);
     };
-  }, [photo.src, photo.caption]);
+  }, [photo.src, photo.caption, photo.depth]);
 
   useFrame(() => {
     const node = mesh.current;
@@ -105,8 +124,8 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
     // the photo arrives. See lib/runner-layout.
     const k = holdScale(runZ);
     rest.set(
-      photo.holdX * k + photo.x * spread,
-      photo.holdY * k + photo.y * spread,
+      photo.holdX * k + photo.x * spreadX,
+      photo.holdY * k + photo.y * spreadY,
       runZ,
     );
 
@@ -123,6 +142,11 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
         // Drawn all the way in: a photo is only gone once it has crossed the
         // camera, not while it is still large and mid-screen.
         distance > PASS_NEAR &&
+        // The far end of the mount window is a texture lead, not something to
+        // draw: past FOG_FAR a card is entirely fog, which is the page's own
+        // colour. The camera's far plane is there too, so this mostly saves
+        // three's own cull the trouble of working that out.
+        distance < FOG_FAR &&
         // Once handed over, the deck holds this event's own copy of it. Only
         // this card steps aside — the rest of the run stays out there, dimmed.
         !(focusState.handed && focusState.eventId === photo.eventId);
@@ -197,11 +221,11 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
   return (
     <mesh
       ref={mesh}
+      geometry={CARD_GEOMETRY}
       visible={false}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
     >
-      <planeGeometry args={[1, 1]} />
       <meshBasicMaterial
         ref={material}
         map={texture}

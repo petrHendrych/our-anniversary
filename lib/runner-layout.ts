@@ -139,9 +139,39 @@ const DESIGN_WIDTH = 1400;
  * tiny share of the frame, which is what made the whole scene read as further
  * away on a phone than on a laptop. The square root closes most of that gap
  * and leaves every screen at or above 1400px exactly where it was.
+ *
+ * On its own it overshot, though: the square root is the *height* answer, and
+ * applied to the width it made a card 90% of a phone screen across. A month
+ * then read as one pile of overlapping paper with no frame around it — see
+ * fitScale, which is what actually places a card.
  */
 export function planeScale(viewportWidth: number): number {
   return Math.min(1, Math.sqrt(viewportWidth / DESIGN_WIDTH));
+}
+
+/**
+ * The widest a card may be, as a share of the viewport.
+ *
+ * This is the number that stops a narrow screen from being one card wide.
+ * Below it there is room either side of a print for the next one to be a
+ * separate object rather than an overlap, which is the whole reason the run is
+ * scattered rather than centred.
+ */
+const MAX_CARD_SHARE = 0.62;
+
+/**
+ * Where planeScale lands after the frame has had its say.
+ *
+ * The photograph's own aspect is only known once its texture is baked, so the
+ * cap is applied per card rather than folded into planeScale: a portrait print
+ * and a landscape one of the same `size` are not the same number of pixels
+ * across. MonthCard and MonthDeck both call this with the same arguments and
+ * therefore get the same answer, which is what keeps the hand-over invisible.
+ */
+export function fitScale(viewportWidth: number, cardWidth: number): number {
+  const scale = planeScale(viewportWidth);
+  if (cardWidth <= 0) return scale;
+  return Math.min(scale, (viewportWidth * MAX_CARD_SHARE) / cardWidth);
 }
 
 /**
@@ -158,20 +188,50 @@ export function bodyScale(viewportWidth: number): number {
   return Math.min(1, viewportWidth / DESIGN_WIDTH);
 }
 
+/** The frame height the run is authored against, alongside DESIGN_WIDTH. */
+const DESIGN_HEIGHT = 900;
+/**
+ * Most a portrait frame may stretch the scatter vertically.
+ *
+ * A phone is roughly three times as tall as it is wide relative to the desktop
+ * frame the run was authored in, so scaling the drift by the width alone —
+ * which is what the single spreadScale() did — squeezed a month into a knot in
+ * the middle of a very tall screen with empty colour above and below it. The
+ * vertical axis has the room, so it gets some of it. Not all of it: a card a
+ * full screen-height off centre has nothing on screen to tap.
+ */
+const TALL_BOOST = 1.8;
+
 /**
  * Photo *placement*, in proportion to the screen it is placed on.
  *
- * This used to be floored at 1, so a phone got the full desktop spread and had
- * to be panned around to reach the edges of it. In practice the outermost card
- * of a month sat the better part of two screen widths off centre and could not
- * be tapped at all. Scaling straight with the viewport instead means the same
- * arrangement covers the same share of the frame everywhere — the widest card
- * is a little over half a screen off centre on a phone exactly as it is on a
- * desktop, so it always has enough of itself on screen to be reached, and the
- * tilt still brings the rest of it in.
+ * Horizontally this scales straight with the viewport, so the same arrangement
+ * covers the same share of the width everywhere — the widest card is a little
+ * over half a screen off centre on a phone exactly as it is on a desktop, so
+ * it always has enough of itself on screen to be reached, and the tilt brings
+ * the rest of it in. It used to be floored at 1, which put the outermost card
+ * of a month the better part of two screen widths away and out of reach.
  */
-export function spreadScale(viewportWidth: number): number {
+export function spreadScaleX(viewportWidth: number): number {
   return viewportWidth / DESIGN_WIDTH;
+}
+
+/**
+ * The same, vertically — with the extra room a portrait frame has.
+ *
+ * The scatter is already an ellipse (see TALL); this is about the frame rather
+ * than the shape. A screen that is proportionally taller than the design frame
+ * gets its drift stretched by up to TALL_BOOST, which is what puts a month's
+ * cards up and down a phone screen instead of all within a hand's width of
+ * its middle. A desktop is unchanged.
+ */
+export function spreadScaleY(viewportWidth: number, viewportHeight: number): number {
+  const tallness =
+    viewportHeight / viewportWidth / (DESIGN_HEIGHT / DESIGN_WIDTH);
+  return (
+    spreadScaleX(viewportWidth) *
+    Math.min(TALL_BOOST, Math.max(1, tallness))
+  );
 }
 
 export interface RunnerPhoto {
@@ -193,7 +253,7 @@ export interface RunnerPhoto {
   slide: number;
   /** Distance from the start of the run. Grows as the reader scrolls. */
   depth: number;
-  /** Outward drift, in world units, before spreadScale(). */
+  /** Outward drift, in world units, before spreadScaleX/Y(). */
   x: number;
   y: number;
   /** Clearance held from the middle of the frame, in CSS pixels at any depth. */
