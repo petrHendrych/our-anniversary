@@ -67,6 +67,16 @@ const state: FocusState = {
 /** True for the length of the flight home, so a second tap cannot restart it. */
 let closing = false;
 
+/**
+ * The card at the front of the deck, wrapped into the set and rounded to a
+ * whole photograph — `cursor` with everything React cannot use taken off it.
+ *
+ * It exists because which photographs are *mounted* has to be a React
+ * decision, and `cursor` is a float that moves every frame under a finger.
+ * This changes once per card instead, so a swipe costs one render.
+ */
+let slot = 0;
+
 const listeners = new Set<() => void>();
 
 function notify() {
@@ -96,6 +106,7 @@ export function focusCard(
   // A deck always opens on its own cover: that is the card that was tapped,
   // and the only one of the event's photographs that was ever in the run.
   state.cursor = 0;
+  slot = 0;
   state.landed = false;
   notify();
 
@@ -151,10 +162,43 @@ export function releaseFocus(): void {
       state.handed = false;
       state.count = 0;
       state.cursor = 0;
+      slot = 0;
       closing = false;
       notify();
     },
   });
+}
+
+/**
+ * Publish the whole-card cursor, if it has moved a whole card.
+ *
+ * Called from the deck's own frame loop rather than from each of the places
+ * that move the cursor: two of those are GSAP tweens, and reading the result
+ * once a frame catches every one of them without a tween needing to know that
+ * anything is listening. Cheap when nothing has changed, which is most frames.
+ */
+export function publishDeckSlot(): void {
+  // Frozen for the flight home. Closing winds the cursor back to the cover by
+  // the shortest way round, which on a big deck is a sweep across half the
+  // ring — republishing through that would mount and unmount every card on
+  // the way past, and queue a bake for each, in the quarter of a second the
+  // deck is folding up. What is already mounted fades to the back on its own,
+  // and the cover it is winding to is always mounted (see deckWindow).
+  if (closing) return;
+  const count = Math.max(1, state.count);
+  const next = ((Math.round(state.cursor) % count) + count) % count;
+  if (next === slot) return;
+  slot = next;
+  notify();
+}
+
+/** Re-renders once per card swiped, so the deck can window what it mounts. */
+export function useDeckSlot(): number {
+  return useSyncExternalStore(
+    subscribe,
+    () => slot,
+    () => 0,
+  );
 }
 
 /** Under the finger: the cursor follows the drag directly. */

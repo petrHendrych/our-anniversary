@@ -94,13 +94,83 @@ function captionFamily(): Promise<string> {
   return family;
 }
 
+/**
+ * Warmed bytes: photographs fetched before anything wants to bake them.
+ *
+ * A bake is four separate costs — fetch, decode, canvas, upload — and only the
+ * last three are worth serializing. The fetch is the one that has to wait on a
+ * network, and because bakes run one at a time the fetch for the next card
+ * does not even begin until the card before it has finished drawing itself.
+ * On a cold cache that is a queue of round trips taken in single file.
+ *
+ * So the bytes are collected separately and in parallel, ahead of the queue:
+ * `warmPhoto` starts a fetch and holds the blob, and `take` hands it to the
+ * bake when its turn comes. What is held is bounded and small — a blob of a
+ * shipped photograph is a couple of hundred kilobytes, and there are never
+ * more than WARM_KEEP of them — so this is not a second texture cache by
+ * another name. Nothing here touches a canvas or the GPU.
+ *
+ * `seen` is what keeps eight hundred photographs from being eight hundred
+ * downloads: a source is only ever warmed once per session, whether the warm
+ * or the bake got to it first.
+ */
+const WARM_KEEP = 20;
+const warming = new Map<string, Promise<Blob>>();
+/** Warmed sources, oldest first — the eviction order. */
+const warmOrder: string[] = [];
+const seen = new Set<string>();
+
+/**
+ * Start fetching a photograph that nothing is asking to draw yet.
+ *
+ * Cheap to call often and safe to call for a card that is already baked: it
+ * returns immediately for anything fetched once already this session.
+ */
+export function warmPhoto(src: string): void {
+  if (seen.has(src)) return;
+  seen.add(src);
+
+  const held = fetch(src, { priority: "low" } as RequestInit).then((response) => {
+    if (!response.ok) throw new Error(`${src}: ${response.status}`);
+    return response.blob();
+  });
+  // A warm that fails is not a verdict on the photograph — forget it happened
+  // and let the bake fetch it properly. Attached here so the rejection is
+  // always handled, even for a blob nothing ends up taking.
+  held.catch(() => {
+    warming.delete(src);
+    seen.delete(src);
+  });
+
+  warming.set(src, held);
+  warmOrder.push(src);
+  while (warmOrder.length > WARM_KEEP) {
+    const evicted = warmOrder.shift();
+    if (evicted) warming.delete(evicted);
+  }
+}
+
+/** The warmed bytes if any are still held, otherwise a plain fetch. */
+async function take(src: string): Promise<Blob> {
+  seen.add(src);
+  const warmed = warming.get(src);
+  if (warmed) {
+    warming.delete(src);
+    const i = warmOrder.indexOf(src);
+    if (i >= 0) warmOrder.splice(i, 1);
+    const blob = await warmed.catch(() => null);
+    if (blob) return blob;
+  }
+  const response = await fetch(src);
+  if (!response.ok) throw new Error(`${src}: ${response.status}`);
+  return response.blob();
+}
+
 async function decode(src: string): Promise<ImageBitmap | HTMLImageElement> {
   if (typeof createImageBitmap === "function") {
-    const response = await fetch(src);
-    if (!response.ok) throw new Error(`${src}: ${response.status}`);
     // Without this a phone photo bakes on its side: createImageBitmap ignores
     // EXIF rotation by default, where <img> honours it.
-    return createImageBitmap(await response.blob(), { imageOrientation: "from-image" });
+    return createImageBitmap(await take(src), { imageOrientation: "from-image" });
   }
   const image = new Image();
   image.src = src;

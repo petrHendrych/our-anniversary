@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { PerspectiveCamera } from "@react-three/drei";
 import * as THREE from "three";
@@ -14,6 +14,7 @@ import {
   useNearestPhotoIndex,
 } from "@/lib/scroll-store";
 import { markSceneReady } from "@/lib/preload-store";
+import { warmPhoto } from "@/lib/card-texture";
 import { openingPalette, paletteFor } from "@/lib/palette";
 import { CAMERA_Z, FOG_FAR, FOG_NEAR, runnerPhotos } from "@/lib/runner-layout";
 
@@ -38,6 +39,18 @@ const BEHIND = 2;
  * be, so it can be recut in steps and still always contain everything visible.
  */
 const SLACK = 2;
+
+/**
+ * Covers whose *bytes* are fetched past each end of the mount window.
+ *
+ * A warm is a fetch and nothing else — no decode, no canvas, no texture — so
+ * it is cheap enough to reach further than the mount window ever should, and
+ * it is the only part of a bake that has to wait on a network. See warmPhoto.
+ * TRAIL is small because a reader who turns round is already looking at cards
+ * whose prints are still in the retained cache.
+ */
+const LEAD = 5;
+const TRAIL = 2;
 
 /**
  * Fog is the page's own background colour, so a photo in the distance dissolves
@@ -99,6 +112,19 @@ function Photos() {
   ) {
     setWindow(cut(nearest));
   }
+
+  // Fetch the covers just past each end of the window, so the bake queue never
+  // waits on a network. Forward first: that is where the reader is going, and
+  // the order these are called in is the order the requests go out.
+  useEffect(() => {
+    if (!entered) return;
+    for (let i = range.to; i < Math.min(runnerPhotos.length, range.to + LEAD); i++) {
+      warmPhoto(runnerPhotos[i].src);
+    }
+    for (let i = Math.max(0, range.from - TRAIL); i < range.from; i++) {
+      warmPhoto(runnerPhotos[i].src);
+    }
+  }, [entered, range]);
 
   // No month exists until the reader is through the lens.
   if (!entered) return null;

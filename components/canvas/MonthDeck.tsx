@@ -7,12 +7,14 @@ import { scrollState } from "@/lib/scroll-store";
 import {
   dragDeck,
   focusState,
+  publishDeckSlot,
   releaseFocus,
   settleDeck,
+  useDeckSlot,
   useFocusedEventId,
 } from "@/lib/focus-store";
 import { FOCUS_DISTANCE, focusPose } from "@/lib/focus-layout";
-import { deckSeed, pilePose, ringOffset } from "@/lib/deck-layout";
+import { deckSeed, deckWindow, pilePose, ringOffset } from "@/lib/deck-layout";
 import {
   CAMERA_Z,
   fitScale,
@@ -23,7 +25,7 @@ import {
   spreadScaleY,
   type RunnerPhoto,
 } from "@/lib/runner-layout";
-import { acquireCardTexture, releaseCardTexture } from "@/lib/card-texture";
+import { acquireCardTexture, releaseCardTexture, warmPhoto } from "@/lib/card-texture";
 import { CARD_GEOMETRY } from "@/components/canvas/MonthCard";
 
 /** Share of the screen a finger has to travel to turn the deck by one card. */
@@ -75,6 +77,26 @@ export function MonthDeck() {
   const photos = useMemo(() => photosForEvent(eventId), [eventId]);
   const dragged = useDeckGestures(eventId, photos.length);
 
+  // The cursor never notifies React — it moves every frame under the reader's
+  // finger — so the whole-card position is read off it once a frame instead.
+  useFrame(() => publishDeckSlot());
+
+  // Only the front of the ring is mounted: the pile draws four places back and
+  // the rest were sitting at alpha zero holding a texture each. A small set
+  // still mounts all of itself, so nothing about a four-photo event changes.
+  const slot = useDeckSlot();
+  const mounted = useMemo(() => deckWindow(slot, photos.length), [slot, photos.length]);
+
+  // Their bytes, in parallel, as soon as they are wanted — a swipe or two
+  // before they are drawn. The bakes behind them stay serialized on purpose,
+  // one decode, canvas and upload at a time, but nothing makes their downloads
+  // queue behind each other, and on a cold cache that was the next swipe
+  // waiting on a round trip that could have been taken already. The cover was
+  // fetched back in the run; warmPhoto ignores anything already fetched.
+  useEffect(() => {
+    for (const index of mounted) warmPhoto(photos[index].src);
+  }, [mounted, photos]);
+
   if (!eventId || photos.length === 0) return null;
 
   return (
@@ -89,15 +111,17 @@ export function MonthDeck() {
         if (focusState.landed && !dragged.current) releaseFocus();
       }}
     >
-      {photos.map((photo, index) => (
-        <DeckCard
-          key={photo.key}
-          photo={photo}
-          index={index}
-          count={photos.length}
-          dragged={dragged}
-        />
-      ))}
+      {photos.map((photo, index) =>
+        mounted.has(index) ? (
+          <DeckCard
+            key={photo.key}
+            photo={photo}
+            index={index}
+            count={photos.length}
+            dragged={dragged}
+          />
+        ) : null,
+      )}
     </group>
   );
 }

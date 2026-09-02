@@ -46,9 +46,15 @@ for the full shape. An event is one thing that happened: its cover is the card
 that flies in the run, and its photos are the deck that card opens into. To add
 one:
 
-1. Drop resized photos (long edge ~1500–2000px) into
-   `public/images/<month-id>/<event-slug>/` — `cover.jpg` plus `01.jpg`,
-   `02.jpg`, and so on.
+1. Drop the camera originals into `originals/<month-id>/<event-slug>/` —
+   `cover` plus `01`, `02`, and so on, in whatever format they came in — then
+   run `npm run photos`. That folder is gitignored; the script resizes to a
+   1400px long edge, bakes in EXIF orientation, strips every tag (GPS
+   included) and writes `public/images/<month-id>/<event-slug>/cover.jpg`
+   etc., which is what actually ships. It only re-encodes what changed, so
+   importing one month costs one month. Photographs it does not have originals
+   for yet are listed at the end, and iPhone `.heic` files need converting
+   first — it prints the `sips` command for that.
 2. Add an entry to that month's `events`, with a `slug`, a `title`, and how
    many `photos` it has. `title` is what gets printed along the bottom border
    of the card; a photo's own `caption` is printed on its card in the deck,
@@ -80,13 +86,23 @@ Deploys to a generated `*.vercel.app` URL — no custom domain configured.
 
 ## Performance notes
 - Source photos are resized before use; don't drop full-resolution camera
-  originals straight into `public/images/`.
+  originals straight into `public/images/` — `npm run photos` is the way in.
+- Only the fetch part of a bake is warmed ahead: `warmPhoto()` in
+  `lib/card-texture.ts` collects the bytes for the few covers past each end of
+  the mount window, and for a whole event's set the moment its card is tapped,
+  in parallel and with no decode, canvas or texture attached. The bakes
+  themselves stay strictly one at a time.
 - Only a sliding window of card textures is kept loaded at once — see
   `lib/card-texture.ts`, which also bakes each card's printed frame and
   downsamples the photograph on its way into the texture. Call
   `residentTextureCount()` from the console when profiling.
-- Opening a card mounts that event's whole deck (four to eight cards) on top
-  of the run's own window. Only its cover is already baked from the run, so
-  the rest bake at once — which is why an event's photo set stays small.
+- Opening a card mounts a window onto that event's deck — the card on its way
+  out, the four places the pile actually draws, two of lead and the cover —
+  eight or nine cards at most, however many photographs the event has. A set
+  of eight or fewer mounts whole. See `deckWindow()` in `lib/deck-layout.ts`.
+- `/images/*` is served with a month of freshness and background revalidation
+  (`next.config.ts`). Without it every photograph costs a conditional request
+  on each repeat visit, which at eight hundred of them is all latency and no
+  bytes.
 - Built and tuned against a specific known device pair rather than a broad
   compatibility matrix — see `REQUIREMENTS.md`.

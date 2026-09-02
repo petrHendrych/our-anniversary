@@ -42,3 +42,6 @@ next-env.d.ts
 
 # idea
 .idea
+# camera originals — resized copies are what ship (scripts/resize-photos.mjs)
+/originals/*
+!/originals/README.md

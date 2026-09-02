@@ -29,6 +29,45 @@ export function visibleDepth(count: number): number {
 }
 
 /**
+ * Cards mounted past the back of the visible pile.
+ *
+ * The pile draws `visibleDepth` places back and everything beyond that is at
+ * alpha zero, so those are the only ones worth *drawing* — but a card has to
+ * be mounted before it can be baked, and a texture that starts baking the
+ * frame it becomes visible arrives too late. Two places of lead is the
+ * difference between swiping into a photograph and swiping into a gap.
+ */
+const MOUNT_LEAD = 2;
+
+/**
+ * Which photographs of a deck are mounted, given the card at the front.
+ *
+ * An event's whole set used to mount at once, which was fine while a set was
+ * four to eight pictures: only the front few are ever drawn, and the rest sat
+ * at alpha zero costing a texture each. At forty pictures that is forty prints
+ * baked and resident on top of the run's own window, which is well past what
+ * mobile Safari will hold — so the ring is windowed the same way the run is.
+ *
+ * One card behind the front (the one on its way out, at offset -1), the
+ * visible pile, and MOUNT_LEAD past it. The modulo folds duplicates together,
+ * so a deck smaller than the window mounts all of itself and nothing changes
+ * for a small event.
+ */
+export function deckWindow(slot: number, count: number): Set<number> {
+  const wanted = new Set<number>();
+  if (count <= 0) return wanted;
+  const span = visibleDepth(count) + MOUNT_LEAD;
+  for (let k = -1; k <= span; k++) {
+    wanted.add((((slot + k) % count) + count) % count);
+  }
+  // The cover, wherever the reader has spun to. It costs no bake — the run
+  // card it came from is holding that same print — and closing winds the deck
+  // back to it, which is the one card that has to be there when it lands.
+  wanted.add(0);
+  return wanted;
+}
+
+/**
  * Where card `i` sits relative to the front of the deck, in [-1, count - 1].
  * Zero is the card being looked at; -1 is the same slot as the very back.
  */
