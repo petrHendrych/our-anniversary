@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { scrollState, subscribeScroll, useActiveMonthIndex, useEntered } from "@/lib/scroll-store";
+import {
+  scrollState,
+  subscribeScrollFrame,
+  useActiveMonthIndex,
+  useEntered,
+} from "@/lib/scroll-store";
 import { useHasEntered } from "@/lib/preload-store";
 import { useFocusedMonthId } from "@/lib/focus-store";
 import { months } from "@/lib/timeline";
@@ -32,7 +37,7 @@ export function ProgressHeader() {
       bar.style.transform = `scaleX(${scrollState.progress})`;
     };
     paint();
-    return subscribeScroll(paint);
+    return subscribeScrollFrame(paint);
   }, []);
 
   // An open card belongs to one month, not to the run the header measures.

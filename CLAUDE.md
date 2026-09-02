@@ -36,12 +36,20 @@ devices," not broad compatibility.
    never flown through; `x/y` are plain world offsets that count for little far
    away and more as the photo arrives, which is the outward drift. Both
    MonthCard and MonthDeck place a card with
-   `photo.holdX * holdScale(runZ) + photo.x * spread` — they must agree or
-   opening a card jumps. `spread` scales the drift only, because `hold` is
-   already a screen measurement — and `spread` now scales *down* on a phone
-   (it used to be floored at 1), so the outermost card of a month is still
-   reachable there instead of sitting two screen widths off centre. Photos are drawn the whole way in and fade only as
-   they cross the camera, like the flying month titles.
+   `photo.holdX * holdScale(runZ) + photo.x * spreadX` (and the same in y) at
+   `fitScale(viewportWidth, cardWidth)` — they must agree or opening a card
+   jumps. The spread scales the drift only, because `hold` is already a screen
+   measurement. It is anisotropic: `spreadScaleX` goes straight with the
+   viewport width (it used to be floored at 1, which put the outermost card of
+   a month two screen widths off centre and out of reach), while
+   `spreadScaleY` gets up to `TALL_BOOST` more, because a phone frame has
+   vertical room the design frame did not — without it a month collapsed into
+   a knot in the middle of a very tall screen. `fitScale` then caps a print at
+   `MAX_CARD_SHARE` of the viewport width: `planeScale`'s square root is the
+   *height* answer, and left to itself it made a card 90% of a phone screen
+   across, so a month read as one pile of overlapping paper. Photos are drawn
+   the whole way in and fade only as they cross the camera, like the flying
+   month titles.
 3. **One scroll source of truth.** `lenis` drives real page scroll, and
    `gsap.ticker` drives Lenis. `ScrollDriver` reads that one scroll position
    once per frame off the same ticker and publishes it to `scroll-store`;
@@ -94,6 +102,16 @@ devices," not broad compatibility.
    cards) and dispose textures for anything scrolled far out of range. An
    event's photographs are mounted only while its card is open, and all of
    them at once — which is the reason to keep a set small.
+
+   *When* a print is baked matters as much as how many. A bake is a fetch, a
+   decode, a canvas the size of a print, and then a synchronous texture upload
+   the first time the card draws; a fast flick used to fire half a dozen of
+   them in one frame, which is what made fast scrolling choppy. So bakes are
+   serialized, taken nearest-first, and a card that leaves the mount window
+   before its turn comes round is dropped from the queue rather than baked for
+   nobody (`lib/card-texture.ts`). The mount window itself is hysteretic for
+   the same reason — it is recut only when it no longer covers what is visible,
+   so a flick costs a recut every few cards instead of one per card.
 8. **The loading gate counts real work, and it is the page's one guaranteed
    tap.** `lib/preload-store.ts` tracks a fixed list — the display face, the
    scene's first frame, and the first few photographs baked into cards — so the
@@ -175,7 +193,7 @@ components/
 data/
   timeline.ts               # YearBlock[] -> Month[] -> MemoryEvent[] -> photos
 lib/
-  scroll-store.ts           # scroll progress; `depth` never notifies
+  scroll-store.ts           # scroll progress; `depth`/`progress` never notify React
   focus-store.ts            # which card is open; `t`/`spread`/`cursor` never notify
   focus-layout.ts           # where the front card of a deck lands
   deck-layout.ts            # the ring: where each card sits behind the front one

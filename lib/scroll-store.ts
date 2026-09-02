@@ -54,21 +54,36 @@ const state: ScrollSnapshot = {
   passed: false,
 };
 const listeners = new Set<() => void>();
+const frameListeners = new Set<() => void>();
 
 /** Live, mutable read for animation loops. Never mutate from outside. */
 export const scrollState: Readonly<ScrollSnapshot> = state;
 
+/**
+ * Called only when one of the *discrete* values changes — the active month,
+ * the nearest photo, the two gates. This is what React subscribes to.
+ *
+ * `progress` used to count as a change here, which meant every reader of this
+ * store was woken sixty to a hundred and twenty times a second and asked
+ * whether anything it cared about had moved. Nothing had, almost every time.
+ */
 export function subscribeScroll(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
 
+/**
+ * Called on every reading, for the one or two things that genuinely track
+ * scroll continuously — the progress bar. Never wire a React render to this.
+ */
+export function subscribeScrollFrame(listener: () => void): () => void {
+  frameListeners.add(listener);
+  return () => frameListeners.delete(listener);
+}
+
 export function setScrollState(next: Partial<ScrollSnapshot>): void {
   let changed = false;
-  if (next.progress !== undefined && next.progress !== state.progress) {
-    state.progress = next.progress;
-    changed = true;
-  }
+  if (next.progress !== undefined) state.progress = next.progress;
   if (next.activeIndex !== undefined && next.activeIndex !== state.activeIndex) {
     state.activeIndex = next.activeIndex;
     changed = true;
@@ -85,10 +100,12 @@ export function setScrollState(next: Partial<ScrollSnapshot>): void {
     state.passed = next.passed;
     changed = true;
   }
-  // `depth` moves every frame and is only ever read from render loops, so it
-  // updates silently — notifying listeners for it would defeat the point.
+  // `depth` and `progress` move every frame and are only ever read from render
+  // loops, so they update without waking the React listeners — that is what
+  // subscribeScrollFrame is for.
   if (next.depth !== undefined) state.depth = next.depth;
   if (changed) for (const listener of listeners) listener();
+  for (const listener of frameListeners) listener();
 }
 
 /**
