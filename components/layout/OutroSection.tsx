@@ -4,7 +4,7 @@ export function OutroSection() {
       <p className="eyebrow text-dim">Next</p>
       <p className="display mt-3 text-[16vw]">Year three</p>
       <p className="mt-5 text-[0.9375rem] leading-6 text-dim">
-        Unwritten so far.
+        Unwritten so far. Let&#39;s write it together
       </p>
     </section>
   );
