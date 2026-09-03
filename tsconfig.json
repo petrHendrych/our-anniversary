@@ -10,6 +10,10 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
+    // data/timeline.ts imports data/photos.generated.ts by its full filename, so
+    // that scripts/resize-photos.mjs can pull the same module in under plain
+    // node type-stripping, which resolves nothing it is not given an extension for.
+    "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
