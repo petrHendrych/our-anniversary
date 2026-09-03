@@ -169,6 +169,11 @@ function useDeckGestures(eventId: string | null, count: number) {
       // A downward drag is a dismissal; it is decided on release, and until
       // then the deck simply does not turn.
       if (Math.abs(dy) > Math.abs(dx)) return;
+      // An event with one photograph has nothing to turn to. Its card is
+      // pinned to the front of the ring, so a sideways drag would only wind
+      // the cursor somewhere the reader cannot see and leave the deck to be
+      // wound back on the way out.
+      if (count < 2) return;
       dragDeck(drag.cursor - dx / span());
     }
 
@@ -183,6 +188,7 @@ function useDeckGestures(eventId: string | null, count: number) {
         if (dy > DISMISS) releaseFocus();
         return;
       }
+      if (count < 2) return;
 
       const seconds = Math.max(0.016, (event.timeStamp - start.time) / 1000);
       const velocity = dx / seconds;
@@ -196,6 +202,7 @@ function useDeckGestures(eventId: string | null, count: number) {
     }
 
     function onKey(event: KeyboardEvent) {
+      if (count < 2) return;
       if (event.key === "ArrowRight") settleDeck(Math.round(focusState.cursor) + 1);
       if (event.key === "ArrowLeft") settleDeck(Math.round(focusState.cursor) - 1);
     }

@@ -14,6 +14,10 @@ import { rngFor } from "@/lib/runner-layout";
  * curve below is shaped to arrive there: `peek` is a sine that returns to zero,
  * and `alpha` reaches zero exactly at the seam. Change one and the deck will
  * blink once per lap.
+ *
+ * All of which costs one card — the hindmost is always parked centred and
+ * transparent — and a deck of one or two has no card to spare. Those are laid
+ * out separately, by `pairPose`.
  */
 
 /** World units a card falls back per place in the pile. */
@@ -70,8 +74,14 @@ export function deckWindow(slot: number, count: number): Set<number> {
 /**
  * Where card `i` sits relative to the front of the deck, in [-1, count - 1].
  * Zero is the card being looked at; -1 is the same slot as the very back.
+ *
+ * A single photograph has no ring to sit on. The arithmetic below hands it
+ * -1 — the slot for a card that has already left — every frame, which is why
+ * an event with one picture opened onto nothing at all: the only card it had
+ * was parked at the back of a pile it was not in.
  */
 export function ringOffset(i: number, cursor: number, count: number): number {
+  if (count <= 1) return 0;
   const raw = i - cursor + 1;
   return (((raw % count) + count) % count) - 1;
 }
@@ -105,12 +115,51 @@ export interface PilePose {
   order: number;
 }
 
+/**
+ * A deck of one or two, placed by hand.
+ *
+ * The pile's curves are shaped to dissolve into depth — peek returns to zero
+ * and alpha reaches zero exactly at the seam — so the card that has just been
+ * swiped away parks in the pose the backmost card already occupies and the
+ * wrap cannot be seen. The price is one card: at rest a deck always has its
+ * hindmost photograph sitting centred, behind the front one and fully
+ * transparent. That is free when there are six and ruinous when there are two,
+ * because two *is* the front card and the parked one.
+ *
+ * So the smallest decks skip the dissolve. What allows it is that both ends of
+ * the range are now the same *photograph* rather than two different ones: the
+ * side no longer has to flip at the seam, so the peek no longer has to pass
+ * through zero to hide the flip, and the back card can lean out far enough to
+ * be seen. It reaches the same offset a three-card deck's middle card does, so
+ * a two-photograph event fans exactly as wide as any other.
+ */
+function pairPose(offset: number, viewportWidth: number, seed: DeckSeed): PilePose {
+  // The absolute offset, because a card sweeping out to -1 and a card resting
+  // one place back are the same card here: the ring meets itself at that one
+  // slot, and both approaches to it have to arrive at the same pose.
+  const u = Math.min(1, Math.abs(offset));
+
+  return {
+    back: u * DECK_STEP,
+    // Fullest at the back rather than tucked in behind — a card squarely
+    // behind another is a card nobody can see, which is what made a
+    // two-photograph deck look like one photograph that kept changing.
+    peek: seed.side * PEEK * viewportWidth * Math.sin((Math.PI * u) / 2),
+    lean: seed.lean * u,
+    // Nothing lies deeper for it to fade into.
+    alpha: 1,
+    order: Math.round(100 - u * 10),
+  };
+}
+
 export function pilePose(
   offset: number,
   count: number,
   viewportWidth: number,
   seed: DeckSeed,
 ): PilePose {
+  if (count <= 2) return pairPose(offset, viewportWidth, seed);
+
   const visible = visibleDepth(count);
   // A card on its way out travels to the same place the backmost card already
   // sits, over the half-lap it has to get there.
