@@ -23,7 +23,7 @@ const newsreader = Newsreader({
 });
 
 export const metadata: Metadata = {
-  title: "Two Years",
+  title: "Two Years ♥",
   description: "A scroll through our first two years.",
   robots: { index: false, follow: false },
 };
