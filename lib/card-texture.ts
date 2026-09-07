@@ -2,6 +2,8 @@
 
 import * as THREE from "three";
 
+import { photoUrl } from "@/lib/photo-edition";
+
 /**
  * Sliding-window cache of *printed* photographs.
  *
@@ -130,7 +132,9 @@ export function warmPhoto(src: string): void {
   if (seen.has(src)) return;
   seen.add(src);
 
-  const held = fetch(src, { priority: "low" } as RequestInit).then((response) => {
+  // The stamped URL, here and in every other fetch below: the path is the
+  // key, the stamp is what the network is asked for. See lib/photo-edition.
+  const held = fetch(photoUrl(src), { priority: "low" } as RequestInit).then((response) => {
     if (!response.ok) throw new Error(`${src}: ${response.status}`);
     return response.blob();
   });
@@ -161,7 +165,7 @@ async function take(src: string): Promise<Blob> {
     const blob = await warmed.catch(() => null);
     if (blob) return blob;
   }
-  const response = await fetch(src);
+  const response = await fetch(photoUrl(src));
   if (!response.ok) throw new Error(`${src}: ${response.status}`);
   return response.blob();
 }
@@ -173,7 +177,7 @@ async function decode(src: string): Promise<ImageBitmap | HTMLImageElement> {
     return createImageBitmap(await take(src), { imageOrientation: "from-image" });
   }
   const image = new Image();
-  image.src = src;
+  image.src = photoUrl(src);
   await image.decode();
   return image;
 }

@@ -23,8 +23,17 @@ import { acquireCardTexture, releaseCardTexture } from "@/lib/card-texture";
 
 /** Only a photo this near the camera plane answers a tap. */
 const TAP_RANGE = 700;
-/** How far the rest of the run dims and falls back while a deck is open. */
-const DIM = 0.72;
+/**
+ * The rest of the run while a deck is open: gone, not dimmed.
+ *
+ * It used to fade to a quarter strength and fall back a little, which reads
+ * well for cards out in the haze and not at all for one that happens to be
+ * a step from the lens — a print at that distance covers most of the screen,
+ * and a quarter of it is still a face laid over the photograph the reader
+ * just opened. Nothing in this scene writes depth, so it cannot be sorted
+ * behind the deck either; the honest answer is to take it away. RECEDE is
+ * kept because it is what makes the run let go rather than switch off.
+ */
 const RECEDE = 140;
 
 /**
@@ -131,14 +140,16 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
 
     if (t === 0) {
       // Whatever is open takes the run's attention with it: the rest of the
-      // photographs fall back into the haze and dim, rather than the open card
-      // having to be lit against them.
+      // photographs fall back into the haze and out of sight, rather than the
+      // open card having to be lit against them.
       const away = focusState.eventId ? focusState.t : 0;
       node.position.copy(rest);
       node.position.z -= RECEDE * away;
       node.rotation.z = photo.roll;
       node.scale.set(w, h, 1);
       node.visible =
+        // Nothing of the run is drawn once a deck has the reader's attention.
+        away < 0.995 &&
         // Drawn all the way in: a photo is only gone once it has crossed the
         // camera, not while it is still large and mid-screen.
         distance > PASS_NEAR &&
@@ -147,8 +158,8 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
         // colour. The camera's far plane is there too, so this mostly saves
         // three's own cull the trouble of working that out.
         distance < FOG_FAR &&
-        // Once handed over, the deck holds this event's own copy of it. Only
-        // this card steps aside — the rest of the run stays out there, dimmed.
+        // Once handed over, the deck holds this event's own copy of it — and
+        // by then the rest of the run has faded out from under it anyway.
         !(focusState.handed && focusState.eventId === photo.eventId);
       if (node.renderOrder !== 0) {
         node.renderOrder = 0;
@@ -156,7 +167,7 @@ export function MonthCard({ photo }: { photo: RunnerPhoto }) {
       }
       // Fog handles distance; this only covers the first moments past the lens,
       // where the run is being revealed rather than flown through.
-      surface.opacity = gate * (1 - DIM * away);
+      surface.opacity = gate * (1 - away);
       return;
     }
 

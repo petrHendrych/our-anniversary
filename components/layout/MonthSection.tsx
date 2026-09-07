@@ -33,10 +33,19 @@ export function MonthSection({ month, index }: { month: Month; index: number }) 
       className="relative z-10"
       style={{ height: `${(screens * 100).toFixed(1)}svh` }}
     >
+      {/* The section is measured in svh and the frame inside it in dvh, and
+          the two units are doing different jobs. The section is scroll length:
+          it must not change when a phone slides its URL bar away, or the map
+          from scroll to depth would move under the reader mid-flight — which
+          is also why ScrollTrigger runs with ignoreMobileResize. The frame is
+          where the copy sits on the glass, and there svh is simply wrong: it
+          is the height with the browser chrome *showing*, so once the chrome
+          slides off the text hangs a chrome's worth above the bottom of the
+          screen, which on a phone is most of a thumb. dvh is the viewport the
+          reader is actually looking at. */}
       <div
         data-month-copy-frame
-        className="sticky top-0 flex h-svh flex-col justify-end px-5"
-        style={{ paddingBottom: "calc(5rem + env(safe-area-inset-bottom))" }}
+        className="sticky top-0 flex h-dvh flex-col justify-end px-5 pb-[calc(2.75rem+env(safe-area-inset-bottom))] sm:pb-[calc(5rem+env(safe-area-inset-bottom))]"
       >
         <div data-month-copy className="max-w-[19rem] sm:max-w-[21rem]">
           <p className="eyebrow text-dim">

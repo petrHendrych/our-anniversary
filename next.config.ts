@@ -8,11 +8,12 @@ const nextConfig: NextConfig = {
    * Eight hundred round trips to be told nothing changed is slower on a phone
    * than the bytes would have been on a fast connection.
    *
-   * A month fresh, then served from cache while it is refreshed in the
-   * background. `immutable` would be simpler and is what a content-hashed
-   * filename would deserve, but these names are stable — cover.jpg stays
-   * cover.jpg when a better photograph replaces it — and immutable means a
-   * reader who has already seen the old one never gets the new one.
+   * `immutable`, because a request now carries its month's version stamp
+   * (lib/photo-edition.ts) and a replaced photograph therefore arrives at a
+   * URL nothing has seen. Without the stamp this was actively wrong: the
+   * filenames are stable — cover.jpg stays cover.jpg when a better photograph
+   * replaces it — so a phone that had loaded the placeholder plates went on
+   * drawing them for a month after the real photographs shipped.
    *
    * Skipped in development, where the whole point is that re-importing a
    * photograph shows up on the next reload.
@@ -25,7 +26,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Cache-Control",
-            value: "public, max-age=2592000, stale-while-revalidate=31536000",
+            value: "public, max-age=31536000, immutable",
           },
         ],
       },
